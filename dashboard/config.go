@@ -72,6 +72,8 @@ func LoadConfigFromEnv() *Config {
 		log.Fatal("SESSION_SECRET is required!")
 	}
 	conf.SessionStore = sessions.NewCookieStore([]byte(sessionSecret))
+	conf.SessionStore.Options.Secure = true
+	conf.SessionStore.Options.Domain = conf.DefaultRouteDomain
 
 	pathPrefix := path.Clean(os.Getenv("PATH_PREFIX"))
 	conf.CookiePath = pathPrefix
