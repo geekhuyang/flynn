@@ -616,7 +616,7 @@ class _Client implements Client {
 	private metadata(): grpc.Metadata {
 		const headers = new BrowserHeaders({});
 		if (Config.CONTROLLER_AUTH_KEY) {
-			headers.set('auth_key', Config.CONTROLLER_AUTH_KEY);
+			headers.set('Auth-Key', Config.CONTROLLER_AUTH_KEY);
 		}
 		return headers;
 	}
