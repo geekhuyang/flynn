@@ -8,15 +8,19 @@ apt-get clean
 
 # install protobuf compiler
 pbversion="3.7.1"
+shasum="24ea6924faaf94d4a0c5850fdb278290a326eff9a68f36ee5809654faccd0e10"
 tmpdir=$(mktemp --directory)
 trap "rm -rf ${tmpdir}" EXIT
 curl -sL https://github.com/google/protobuf/releases/download/v${pbversion}/protoc-${pbversion}-linux-x86_64.zip > "${tmpdir}/protoc.zip"
+echo "${shasum}  ${tmpdir}/protoc.zip" | shasum -c -
 unzip -d "${tmpdir}/protoc" "${tmpdir}/protoc.zip"
 mv "${tmpdir}/protoc" /opt
 ln -s /opt/protoc/bin/protoc /usr/local/bin/protoc
 
 # install googleapis common protos
+shasum="9584b7ac21de5b31832faf827f898671cdcb034bd557a36ea3e7fc07e6571dcb"
 curl -fSLo /tmp/common-protos.tar.gz "https://github.com/googleapis/googleapis/archive/common-protos-1_3_1.tar.gz"
+echo "${shasum}  /tmp/common-protos.tar.gz" | shasum -c -
 tar xzf /tmp/common-protos.tar.gz -C "/opt/protoc/include" --strip-components=1
 rm /tmp/common-protos.tar.gz
 
