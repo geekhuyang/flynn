@@ -7,10 +7,8 @@ import ifDev from './ifDev';
 
 // add insights into component re-renders in development
 ifDev(() => {
-	if (false) {
-		const whyDidYouRender = require('@welldone-software/why-did-you-render');
-		whyDidYouRender(React, { include: /.*/, trackHooks: true });
-	}
+	const whyDidYouRender = require('@welldone-software/why-did-you-render');
+	whyDidYouRender(React, { include: /.*/, trackHooks: true });
 });
 
 ReactDOM.render(<Dashboard />, document.getElementById('root'));

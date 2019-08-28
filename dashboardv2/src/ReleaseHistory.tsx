@@ -163,27 +163,39 @@ interface ReleaseHistoryReleaseProps extends BoxProps {
 	onChange: (isSelected: boolean) => void;
 }
 
-function ReleaseHistoryRelease({
-	release: r,
-	prevRelease: p,
-	selected,
-	isCurrent,
-	onChange,
-	...boxProps
-}: ReleaseHistoryReleaseProps) {
-	return (
-		<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
-			<label>
-				<CheckBox
-					checked={selected}
-					indeterminate={!selected && isCurrent}
-					onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
-				/>
-				<ReleaseComponent release={r} prevRelease={p} />
-			</label>
-		</SelectableBox>
-	);
-}
+const ReleaseHistoryRelease = React.memo(
+	function ReleaseHistoryRelease({
+		release: r,
+		prevRelease: p,
+		selected,
+		isCurrent,
+		onChange,
+		...boxProps
+	}: ReleaseHistoryReleaseProps) {
+		return (
+			<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
+				<label>
+					<CheckBox
+						checked={selected}
+						indeterminate={!selected && isCurrent}
+						onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
+					/>
+					<ReleaseComponent release={r} prevRelease={p} />
+				</label>
+			</SelectableBox>
+		);
+	},
+	function areEqual(prevProps: ReleaseHistoryReleaseProps, nextProps: ReleaseHistoryReleaseProps) {
+		if (prevProps.selected !== nextProps.selected) return false;
+		if (prevProps.isCurrent !== nextProps.isCurrent) return false;
+		if (prevProps.release.getName() !== nextProps.release.getName()) return false;
+		if ((prevProps.prevRelease || new Release()).getName() !== (nextProps.prevRelease || new Release()).getName()) {
+			return false;
+		}
+		return true;
+	}
+);
+ifDev(() => ((ReleaseHistoryRelease as any).whyDidYouRender = true));
 
 interface ReleaseHistoryScaleProps extends BoxProps {
 	selected: boolean;
@@ -192,73 +204,82 @@ interface ReleaseHistoryScaleProps extends BoxProps {
 	onChange: (isSelected: boolean) => void;
 }
 
-function ReleaseHistoryScale({
-	scaleRequest: s,
-	selected,
-	isCurrent,
-	onChange,
-	...boxProps
-}: ReleaseHistoryScaleProps) {
-	const releaseID = s.getParent().split('/')[3];
-	const diff = protoMapDiff(s.getOldProcessesMap(), s.getNewProcessesMap(), DiffOption.INCLUDE_UNCHANGED);
-	return (
-		<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
-			<label>
-				<CheckBox
-					checked={selected}
-					indeterminate={!selected && isCurrent}
-					onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
-				/>
-				<div>
-					<div>Release {releaseID}</div>
+const ReleaseHistoryScale = React.memo(
+	function ReleaseHistoryScale({
+		scaleRequest: s,
+		selected,
+		isCurrent,
+		onChange,
+		...boxProps
+	}: ReleaseHistoryScaleProps) {
+		const releaseID = s.getParent().split('/')[3];
+		const diff = protoMapDiff(s.getOldProcessesMap(), s.getNewProcessesMap(), DiffOption.INCLUDE_UNCHANGED);
+		return (
+			<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
+				<label>
+					<CheckBox
+						checked={selected}
+						indeterminate={!selected && isCurrent}
+						onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
+					/>
 					<div>
-						{(() => {
-							switch (s.getState()) {
-								case ScaleRequestState.SCALE_PENDING:
-									return 'PENDING';
-								case ScaleRequestState.SCALE_CANCELLED:
-									return 'CANCELED';
-								case ScaleRequestState.SCALE_COMPLETE:
-									return 'COMPLETE';
-								default:
-									return 'UNKNOWN';
-							}
-						})()}
-					</div>
-					<Box wrap direction="row">
-						{diff.length === 0 ? <Text color="dark-2">&lt;No processes&gt;</Text> : null}
-						{diff.reduce(
-							(m: React.ReactNodeArray, op: DiffOp<string, number>) => {
-								if (op.op === 'remove') {
+						<div>Release {releaseID}</div>
+						<div>
+							{(() => {
+								switch (s.getState()) {
+									case ScaleRequestState.SCALE_PENDING:
+										return 'PENDING';
+									case ScaleRequestState.SCALE_CANCELLED:
+										return 'CANCELED';
+									case ScaleRequestState.SCALE_COMPLETE:
+										return 'COMPLETE';
+									default:
+										return 'UNKNOWN';
+								}
+							})()}
+						</div>
+						<Box wrap direction="row">
+							{diff.length === 0 ? <Text color="dark-2">&lt;No processes&gt;</Text> : null}
+							{diff.reduce(
+								(m: React.ReactNodeArray, op: DiffOp<string, number>) => {
+									if (op.op === 'remove') {
+										return m;
+									}
+									let val = op.value;
+									let prevVal = s.getOldProcessesMap().get(op.key);
+									if (op.op === 'keep') {
+										val = prevVal;
+									}
+									m.push(
+										<ProcessScale
+											key={op.key}
+											direction="row"
+											margin="xsmall"
+											size="xsmall"
+											value={val as number}
+											originalValue={prevVal}
+											showDelta
+											label={op.key}
+										/>
+									);
 									return m;
-								}
-								let val = op.value;
-								let prevVal = s.getOldProcessesMap().get(op.key);
-								if (op.op === 'keep') {
-									val = prevVal;
-								}
-								m.push(
-									<ProcessScale
-										key={op.key}
-										direction="row"
-										margin="xsmall"
-										size="xsmall"
-										value={val as number}
-										originalValue={prevVal}
-										showDelta
-										label={op.key}
-									/>
-								);
-								return m;
-							},
-							[] as React.ReactNodeArray
-						)}
-					</Box>
-				</div>
-			</label>
-		</SelectableBox>
-	);
-}
+								},
+								[] as React.ReactNodeArray
+							)}
+						</Box>
+					</div>
+				</label>
+			</SelectableBox>
+		);
+	},
+	function areEqual(prevProps: ReleaseHistoryScaleProps, nextProps: ReleaseHistoryScaleProps) {
+		if (prevProps.selected !== nextProps.selected) return false;
+		if (prevProps.isCurrent !== nextProps.isCurrent) return false;
+		if (prevProps.scaleRequest.getName() !== nextProps.scaleRequest.getName()) return false;
+		return true;
+	}
+);
+ifDev(() => ((ReleaseHistoryScale as any).whyDidYouRender = true));
 
 export interface Props {
 	appName: string;
@@ -548,6 +569,8 @@ function ReleaseHistory({ appName }: Props) {
 		</>
 	);
 }
-export default React.memo(ReleaseHistory);
+export default React.memo(ReleaseHistory, function areEqual(prevProps: Props, nextProps: Props) {
+	return prevProps.appName !== nextProps.appName;
+});
 
 ifDev(() => ((ReleaseHistory as any).whyDidYouRender = true));

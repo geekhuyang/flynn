@@ -3,6 +3,7 @@ import { debounce } from 'lodash';
 import styled from 'styled-components';
 import { LinkUp as LinkUpIcon, LinkDown as LinkDownIcon } from 'grommet-icons';
 import { Text, Box, BoxProps, Button, CheckBox } from 'grommet';
+import ifDev from './ifDev';
 
 export const valueCSS = (size: string) => `
 	font-size: ${size === 'xsmall' ? '1em' : size === 'small' ? '2em' : '4em'};
@@ -62,7 +63,8 @@ export interface Props extends BoxProps {
  * Example:
  *	<ProcessScale value={3} label="web" editable onChange={(newValue) => { do something with newValue }} />
  */
-export default function ProcessScale({
+const emptyCallback = () => {};
+const ProcessScale = React.memo(function ProcessScale({
 	value: initialValue,
 	originalValue = 0,
 	showDelta = false,
@@ -70,8 +72,8 @@ export default function ProcessScale({
 	label,
 	size = 'small',
 	editable = false,
-	onChange = () => {},
-	onConfirmChange = () => {},
+	onChange = emptyCallback,
+	onConfirmChange = emptyCallback,
 	confirmScaleToZero = false,
 	scaleToZeroConfirmed = false,
 	...boxProps
@@ -196,4 +198,8 @@ export default function ProcessScale({
 			</Box>
 		</Box>
 	);
-}
+});
+
+export default ProcessScale;
+
+ifDev(() => ((ProcessScale as any).whyDidYouRender = true));

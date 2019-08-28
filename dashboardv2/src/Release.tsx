@@ -12,7 +12,7 @@ export interface ReleaseProps {
 	prevRelease?: Release | null;
 }
 
-export default function ReleaseComponent({ release, prevRelease: prev }: ReleaseProps) {
+function ReleaseComponent({ release, prevRelease: prev }: ReleaseProps) {
 	// TODO(jvatic): Add parent field to Release and use that instead of `getName`
 	const { app } = useApp(release.getName().split('/releases/')[0]);
 
@@ -60,3 +60,5 @@ export default function ReleaseComponent({ release, prevRelease: prev }: Release
 		</Box>
 	);
 }
+
+export default React.memo(ReleaseComponent);
