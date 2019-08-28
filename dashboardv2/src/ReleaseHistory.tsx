@@ -63,6 +63,10 @@ function isToday(d: Date): boolean {
 	return true;
 }
 
+function _last<T>(arr: Array<T>): T {
+	return arr[arr.length - 1];
+}
+
 function mapHistory<T>({ deployments, scales, renderRelease, renderScale, renderDate }: MapHistoryProps<T>): T[] {
 	const res = [] as T[];
 	const dlen = deployments.length;
@@ -82,12 +86,12 @@ function mapHistory<T>({ deployments, scales, renderRelease, renderScale, render
 		let el: T;
 		if ((dt && st && dt > st) || (dt && !st)) {
 			date = roundedDate(dt);
-			el = renderRelease(d.getName(), [r as Release, pr], i);
+			el = renderRelease(_last(d.getName().split('/')), [r as Release, pr], i);
 			di++;
 			i++;
 		} else if (st) {
 			date = roundedDate(st);
-			el = renderScale(s.getName(), s, i);
+			el = renderScale(_last(s.getName().split('/')), s, i);
 			si++;
 			i++;
 		} else {
