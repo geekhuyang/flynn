@@ -28,6 +28,7 @@ import Loading from './Loading';
 import CreateDeployment from './CreateDeployment';
 import CreateScaleRequestComponent from './CreateScaleRequest';
 import ReleaseComponent from './Release';
+import WindowedList, { WindowedListItem } from './WindowedList';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
 
@@ -168,16 +169,12 @@ interface ReleaseHistoryReleaseProps extends BoxProps {
 }
 
 const ReleaseHistoryRelease = React.memo(
-	function ReleaseHistoryRelease({
-		release: r,
-		prevRelease: p,
-		selected,
-		isCurrent,
-		onChange,
-		...boxProps
-	}: ReleaseHistoryReleaseProps) {
+	React.forwardRef(function ReleaseHistoryRelease(
+		{ release: r, prevRelease: p, selected, isCurrent, onChange, ...boxProps }: ReleaseHistoryReleaseProps,
+		ref: any
+	) {
 		return (
-			<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
+			<SelectableBox ref={ref} selected={selected} highlighted={isCurrent} {...boxProps}>
 				<label>
 					<CheckBox
 						checked={selected}
@@ -188,7 +185,7 @@ const ReleaseHistoryRelease = React.memo(
 				</label>
 			</SelectableBox>
 		);
-	},
+	}),
 	function areEqual(prevProps: ReleaseHistoryReleaseProps, nextProps: ReleaseHistoryReleaseProps) {
 		if (prevProps.selected !== nextProps.selected) return false;
 		if (prevProps.isCurrent !== nextProps.isCurrent) return false;
@@ -209,17 +206,14 @@ interface ReleaseHistoryScaleProps extends BoxProps {
 }
 
 const ReleaseHistoryScale = React.memo(
-	function ReleaseHistoryScale({
-		scaleRequest: s,
-		selected,
-		isCurrent,
-		onChange,
-		...boxProps
-	}: ReleaseHistoryScaleProps) {
+	React.forwardRef(function ReleaseHistoryScale(
+		{ scaleRequest: s, selected, isCurrent, onChange, ...boxProps }: ReleaseHistoryScaleProps,
+		ref: any
+	) {
 		const releaseID = s.getParent().split('/')[3];
 		const diff = protoMapDiff(s.getOldProcessesMap(), s.getNewProcessesMap(), DiffOption.INCLUDE_UNCHANGED);
 		return (
-			<SelectableBox selected={selected} highlighted={isCurrent} {...boxProps}>
+			<SelectableBox ref={ref} selected={selected} highlighted={isCurrent} {...boxProps}>
 				<label>
 					<CheckBox
 						checked={selected}
@@ -275,7 +269,7 @@ const ReleaseHistoryScale = React.memo(
 				</label>
 			</SelectableBox>
 		);
-	},
+	}),
 	function areEqual(prevProps: ReleaseHistoryScaleProps, nextProps: ReleaseHistoryScaleProps) {
 		if (prevProps.selected !== nextProps.selected) return false;
 		if (prevProps.isCurrent !== nextProps.isCurrent) return false;
@@ -499,51 +493,63 @@ function ReleaseHistory({ appName }: Props) {
 			) : null}
 
 			<form onSubmit={submitHandler}>
-				<Box tag="ul">
-					{mapHistory({
-						deployments,
-						scales: isScaleEnabled ? scales : [],
-						renderDate: (key, date) => <ReleaseHistoryDateHeader key={key} date={date} tag="li" margin="xsmall" />,
-						renderRelease: (key, [r, p]) => (
-							<ReleaseHistoryRelease
-								key={key}
-								tag="li"
-								margin={{ bottom: 'small' }}
-								release={r}
-								prevRelease={p}
-								selected={selectedItemName === r.getName()}
-								isCurrent={currentReleaseName === r.getName()}
-								onChange={(isSelected) => {
-									if (isSelected) {
-										setSelectedItemName(r.getName());
-										setSelectedResourceType(SelectedResourceType.Release);
-									} else {
-										setSelectedItemName(currentReleaseName);
-										setSelectedResourceType(SelectedResourceType.Release);
-									}
-								}}
-							/>
-						),
-						renderScale: (key, s) => (
-							<ReleaseHistoryScale
-								key={key}
-								tag="li"
-								margin={{ bottom: 'small' }}
-								scaleRequest={s}
-								selected={selectedItemName === s.getName()}
-								isCurrent={currentScale ? currentScale.getName() === s.getName() : false}
-								onChange={(isSelected) => {
-									if (isSelected) {
-										setSelectedItemName(s.getName());
-										setSelectedResourceType(SelectedResourceType.ScaleRequest);
-									} else {
-										setSelectedItemName(currentReleaseName);
-										setSelectedResourceType(SelectedResourceType.Release);
-									}
-								}}
-							/>
-						)
-					})}
+				<Box tag="ul" style={{ position: 'relative' }}>
+					<WindowedList>
+						{(windowedListItemProps) => {
+							return mapHistory({
+								deployments,
+								scales: isScaleEnabled ? scales : [],
+								renderDate: (key, date) => <ReleaseHistoryDateHeader key={key} date={date} tag="li" margin="xsmall" />,
+								renderRelease: (key, [r, p], index) => (
+									<WindowedListItem key={key} index={index} {...windowedListItemProps}>
+										{(ref) => (
+											<ReleaseHistoryRelease
+												ref={ref}
+												tag="li"
+												margin={{ bottom: 'small' }}
+												release={r}
+												prevRelease={p}
+												selected={selectedItemName === r.getName()}
+												isCurrent={currentReleaseName === r.getName()}
+												onChange={(isSelected) => {
+													if (isSelected) {
+														setSelectedItemName(r.getName());
+														setSelectedResourceType(SelectedResourceType.Release);
+													} else {
+														setSelectedItemName(currentReleaseName);
+														setSelectedResourceType(SelectedResourceType.Release);
+													}
+												}}
+											/>
+										)}
+									</WindowedListItem>
+								),
+								renderScale: (key, s, index) => (
+									<WindowedListItem key={key} index={index} {...windowedListItemProps}>
+										{(ref) => (
+											<ReleaseHistoryScale
+												ref={ref}
+												tag="li"
+												margin={{ bottom: 'small' }}
+												scaleRequest={s}
+												selected={selectedItemName === s.getName()}
+												isCurrent={currentScale ? currentScale.getName() === s.getName() : false}
+												onChange={(isSelected) => {
+													if (isSelected) {
+														setSelectedItemName(s.getName());
+														setSelectedResourceType(SelectedResourceType.ScaleRequest);
+													} else {
+														setSelectedItemName(currentReleaseName);
+														setSelectedResourceType(SelectedResourceType.Release);
+													}
+												}}
+											/>
+										)}
+									</WindowedListItem>
+								)
+							});
+						}}
+					</WindowedList>
 				</Box>
 
 				<StickyBox bottom="0px" background="background" pad="xsmall" width="medium">
