@@ -33,7 +33,6 @@ interface ItemDimensions {
 
 export default function WindowedList({ children }: Props) {
 	const scrollParentRef = React.useMemo<{ current: HTMLElement | Window | null }>(() => ({ current: null }), []);
-	const scrollHeightRef = React.useMemo<{ current: number | null }>(() => ({ current: null }), []);
 	const maxRenderedIndexRef = React.useMemo<{ current: number }>(() => ({ current: 0 }), []);
 	const listContainerRef = React.useMemo<{ current: HTMLElement | null }>(() => ({ current: null }), []);
 	const listContainerBaselinePaddingTopRef = React.useMemo<{ current: number | null }>(() => ({ current: null }), []);
@@ -69,37 +68,23 @@ export default function WindowedList({ children }: Props) {
 		},
 		[listItemDimensions]
 	);
-	const getScrollTop = React.useCallback(
-		() => {
-			if (scrollParentRef.current === null) {
-				return 0;
-			}
-			let scrollTop = 0;
-			if (scrollParentRef.current === window) {
-				scrollTop = window.scrollY;
-			} else {
-				scrollTop = (scrollParentRef.current as HTMLElement).scrollTop;
-			}
-			return scrollTop;
-		},
-		[scrollParentRef]
-	);
 	const updateRenderedItems = React.useCallback(
 		() => {
-			// TODO: un-render items scrolled out of view and add their height to the listContainer padding-top
-			// TODO: when scroll position gets close to the bottom of the listContainer, render more items
-			// TODO: when we're almost out of items to render at the bottom, fetch more items (requires adding new prop)
+			// TODO: Add threshold for top and bottom render/unrender
 			// TODO: esimate how tall the listContainer should be to render all the items we have and add padding on the bottom for items not currently rendered (so the scroll bar is a more accurate size)
-
-			const getScrollHeight = () => {
-				if (scrollHeightRef.current === null) return 0;
-				return scrollHeightRef.current;
-			};
 
 			const getContainerPadding = () => {
 				if (!listContainerRef.current) return 0;
 				const basePadding = listContainerBaselinePaddingTopRef.current || 0;
 				return parseFloat(listContainerRef.current.style.paddingTop || '0px') - basePadding;
+			};
+
+			const calcScrollHeight = () => {
+				const scrollParentNode = scrollParentRef.current;
+				if (!scrollParentNode) return 0;
+				return scrollParentNode === window
+					? window.innerHeight
+					: (scrollParentNode as HTMLElement).getClientRects()[0].height;
 			};
 
 			const calcContainerDimensions = (): ItemDimensions => {
@@ -137,7 +122,6 @@ export default function WindowedList({ children }: Props) {
 			// 		console.log('updateContainerPadding', { i, height: dimensions.height });
 			// 		padding += dimensions.height;
 			// 	}
-			// 	if (padding > 0) debugger;
 			// 	listContainerRef.current.style.paddingTop = `${padding}px`;
 			// };
 
@@ -147,13 +131,9 @@ export default function WindowedList({ children }: Props) {
 					callback();
 					return;
 				}
-				// console.log('render index', index);
 				const renderItem = listItemForceUpdateFns.get(index);
 				if (!renderItem) {
 					return;
-				}
-				if (index === 0) {
-					console.log('render index', index);
 				}
 				shouldRenderIndices.add(index);
 				// updateContainerPadding();
@@ -173,38 +153,22 @@ export default function WindowedList({ children }: Props) {
 				renderItem(callback);
 			};
 
-			// const scrollTop = getScrollTop();
-			// const scrollHeight = getScrollHeight();
-			// const containerTop = listContainerRef.current ? listContainerRef.current.getClientRects()[0].top : 0;
-			// const containerPadding = getContainerPadding();
-			// const renderedHeight = getRenderedHeight();
-			// console.log({
-			// 	scrollTop,
-			// 	scrollHeight,
-			// 	containerTop,
-			// 	containerPadding,
-			// 	renderedHeight,
-			// 	scrollHeightAndTopAndPadding:
-			// 		scrollHeight + Math.min(0, scrollTop - Math.min(0, containerTop) - containerPadding),
-			// 	scrollTopAndPadding: Math.min(0, scrollTop - Math.min(0, containerTop) - containerPadding)
-			// });
-
-			const renderDevFrame = (frame: number, p: any) => {
-				const elementID = `dev-${frame}`;
-				let node = document.getElementById(elementID);
-				if (!node) {
-					node = document.createElement('div');
-					node.setAttribute('id', elementID);
-					document.body.appendChild(node);
-				}
-				node.style.position = 'fixed';
-				node.style.width = '100%';
-				node.style.top = `${p.topY + p.padding}px`;
-				node.style.right = '100px';
-				node.style.height = `${p.bottomY - p.topY - p.padding * 2}px`;
-				node.style.border = `1px solid ${p.color}`;
-				node.innerText = p.content || '';
-			};
+			// const renderDevFrame = (frame: number, p: any) => {
+			// 	const elementID = `dev-${frame}`;
+			// 	let node = document.getElementById(elementID);
+			// 	if (!node) {
+			// 		node = document.createElement('div');
+			// 		node.setAttribute('id', elementID);
+			// 		document.body.appendChild(node);
+			// 	}
+			// 	node.style.position = 'fixed';
+			// 	node.style.width = '100%';
+			// 	node.style.top = `${p.topY + p.padding}px`;
+			// 	node.style.right = '100px';
+			// 	node.style.height = `${p.bottomY - p.topY - p.padding * 2}px`;
+			// 	node.style.border = `1px solid ${p.color}`;
+			// 	node.innerText = p.content || '';
+			// };
 
 			const render = (fromIndex: number) => {
 				const containerDimensions = calcContainerDimensions();
@@ -212,7 +176,7 @@ export default function WindowedList({ children }: Props) {
 				const containerTop = containerDimensions.top - containerPadding;
 
 				const visibleTopY = Math.max(containerTop, 0);
-				const visibleBottomY = visibleTopY + getScrollHeight();
+				const visibleBottomY = visibleTopY + calcScrollHeight();
 
 				const dimensions = calcItemDimensions(fromIndex);
 
@@ -231,20 +195,20 @@ export default function WindowedList({ children }: Props) {
 				const itemTopY = dimensions.top;
 				const itemBottomY = dimensions.top + dimensions.height;
 
-				renderDevFrame(1, {
-					topY: visibleTopY,
-					bottomY: visibleBottomY,
-					padding: 0,
-					color: 'red'
-				});
+				// renderDevFrame(1, {
+				// 	topY: visibleTopY,
+				// 	bottomY: visibleBottomY,
+				// 	padding: 0,
+				// 	color: 'red'
+				// });
 
-				renderDevFrame(fromIndex + 2, {
-					topY: itemTopY,
-					bottomY: itemBottomY,
-					padding: 0,
-					color: 'black',
-					content: `itemTopY: ${itemTopY} itemBottomY: ${itemBottomY} height: ${itemBottomY - itemTopY}`
-				});
+				// renderDevFrame(fromIndex + 2, {
+				// 	topY: itemTopY,
+				// 	bottomY: itemBottomY,
+				// 	padding: 0,
+				// 	color: 'black',
+				// 	content: `itemTopY: ${itemTopY} itemBottomY: ${itemBottomY} height: ${itemBottomY - itemTopY}`
+				// });
 
 				if (itemBottomY < visibleTopY) {
 					// Remove items that are off top of screen
@@ -276,7 +240,7 @@ export default function WindowedList({ children }: Props) {
 			listItemForceUpdateFns,
 			listItemsRef,
 			maxRenderedIndexRef,
-			scrollHeightRef,
+			scrollParentRef,
 			shouldRenderIndices
 		]
 	);
@@ -288,14 +252,18 @@ export default function WindowedList({ children }: Props) {
 	);
 	const handleScroll = React.useCallback(
 		() => {
-			updateRenderedItems();
+			window.requestAnimationFrame(() => {
+				updateRenderedItems();
+			});
 		},
 		[updateRenderedItems]
 	);
 	const mutationObserver = React.useMemo(
 		() => {
 			return new MutationObserver(() => {
-				updateRenderedItems();
+				window.requestAnimationFrame(() => {
+					updateRenderedItems();
+				});
 			});
 		},
 		[updateRenderedItems]
@@ -310,7 +278,9 @@ export default function WindowedList({ children }: Props) {
 	);
 	const handleResize = React.useCallback(
 		(e: Event) => {
-			updateRenderedItems();
+			window.requestAnimationFrame(() => {
+				updateRenderedItems();
+			});
 		},
 		[updateRenderedItems]
 	);
@@ -331,10 +301,6 @@ export default function WindowedList({ children }: Props) {
 			if (scrollParentRef.current === null) {
 				const scrollParentNode = findScrollParent(node.parentElement);
 				scrollParentRef.current = scrollParentNode;
-				scrollHeightRef.current =
-					scrollParentNode === window
-						? window.innerHeight
-						: (scrollParentNode as HTMLElement).getClientRects()[0].height;
 				scrollParentNode.addEventListener('scroll', handleScroll, false);
 				willUnmountFns.push(() => {
 					scrollParentNode.removeEventListener('scroll', handleScroll, false);
@@ -367,7 +333,6 @@ export default function WindowedList({ children }: Props) {
 			listItemsRef,
 			maxRenderedIndexRef,
 			mutationObserver,
-			scrollHeightRef,
 			scrollParentRef,
 			shouldRenderIndices,
 			upperYBoundRef,
@@ -392,7 +357,7 @@ export const WindowedListItem = ({ children, index, onItemRender, shouldItemRend
 		},
 		[_forceUpdate, forceUpdateCallbackRef]
 	);
-	const ref = React.useRef<HTMLElement>(null);
+	const ref = React.useMemo<{ current: null | HTMLElement }>(() => ({ current: null }), []);
 	React.useLayoutEffect(
 		() => {
 			onItemRender(index, ref.current, forceUpdate);
@@ -402,7 +367,7 @@ export const WindowedListItem = ({ children, index, onItemRender, shouldItemRend
 				callback();
 			}
 		},
-		[forceUpdate, forceUpdateCallbackRef, getItemDimensions, index, onItemRender]
+		[forceUpdate, forceUpdateCallbackRef, getItemDimensions, index, onItemRender, ref]
 	);
 	if (!shouldItemRender(index)) {
 		const dimensions = getItemDimensions(index);
