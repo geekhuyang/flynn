@@ -23,6 +23,7 @@ export interface ChildrenProps {
 }
 
 export interface Props {
+	threshold?: number;
 	children: (props: ChildrenProps) => React.ReactNode;
 }
 
@@ -31,7 +32,7 @@ interface ItemDimensions {
 	height: number;
 }
 
-export default function WindowedList({ children }: Props) {
+export default function WindowedList({ threshold = 0, children }: Props) {
 	const scrollParentRef = React.useMemo<{ current: HTMLElement | Window | null }>(() => ({ current: null }), []);
 	const maxRenderedIndexRef = React.useMemo<{ current: number }>(() => ({ current: 0 }), []);
 	const listContainerRef = React.useMemo<{ current: HTMLElement | null }>(() => ({ current: null }), []);
@@ -70,7 +71,6 @@ export default function WindowedList({ children }: Props) {
 	);
 	const updateRenderedItems = React.useCallback(
 		() => {
-			// TODO: Add threshold for top and bottom render/unrender
 			// TODO: esimate how tall the listContainer should be to render all the items we have and add padding on the bottom for items not currently rendered (so the scroll bar is a more accurate size)
 
 			const getContainerPadding = () => {
@@ -210,7 +210,7 @@ export default function WindowedList({ children }: Props) {
 				// 	content: `itemTopY: ${itemTopY} itemBottomY: ${itemBottomY} height: ${itemBottomY - itemTopY}`
 				// });
 
-				if (itemBottomY < visibleTopY) {
+				if (itemBottomY < visibleTopY - threshold) {
 					// Remove items that are off top of screen
 					if (!(window as any).outOfViewIndices) (window as any).outOfViewIndices = new Set();
 					(window as any).outOfViewIndices.add(fromIndex);
@@ -218,7 +218,7 @@ export default function WindowedList({ children }: Props) {
 					return;
 				}
 
-				if (itemTopY > visibleBottomY) {
+				if (itemTopY > visibleBottomY + threshold) {
 					// Remove items that are off bottom of screen
 					if (!(window as any).outOfViewIndices) (window as any).outOfViewIndices = new Set();
 					(window as any).outOfViewIndices.add(fromIndex);
@@ -241,7 +241,8 @@ export default function WindowedList({ children }: Props) {
 			listItemsRef,
 			maxRenderedIndexRef,
 			scrollParentRef,
-			shouldRenderIndices
+			shouldRenderIndices,
+			threshold
 		]
 	);
 	React.useLayoutEffect(

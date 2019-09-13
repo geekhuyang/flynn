@@ -494,7 +494,7 @@ function ReleaseHistory({ appName }: Props) {
 
 			<form onSubmit={submitHandler}>
 				<Box tag="ul" style={{ position: 'relative' }}>
-					<WindowedList>
+					<WindowedList threshold={700}>
 						{(windowedListItemProps) => {
 							return mapHistory({
 								deployments,
