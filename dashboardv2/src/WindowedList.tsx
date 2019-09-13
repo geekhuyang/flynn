@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { debounce } from 'lodash';
 
 function findScrollParent(node: HTMLElement | null): HTMLElement | Window {
 	while (node) {
@@ -144,15 +145,6 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 				parseFloat(style.getPropertyValue('margin-top')) + parseFloat(style.getPropertyValue('margin-bottom'));
 			const dimensions = { top: rect.top, height: rect.height + margin, scrollTop };
 			listItemDimensions.set(index, dimensions);
-			// if (prevDimensions && nextDimensions) {
-			// 	if (dimensions.top !== nextDimensions.top) {
-			// 		console.log(
-			// 			{ current: dimensions.top, prev: prevDimensions.top, next: nextDimensions.top },
-			// 			scrollTop,
-			// 			prevDimensions.scrollTop
-			// 		);
-			// 	}
-			// }
 			return dimensions;
 		},
 		[getScrollTop, listItemDimensions, listItemsRef]
@@ -301,6 +293,12 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 			unRenderIndex
 		]
 	);
+	const updateRenderedItemsDebounced = React.useMemo(
+		() => {
+			return debounce(updateRenderedItems, 0, { maxWait: 30 });
+		},
+		[updateRenderedItems]
+	);
 	React.useLayoutEffect(
 		() => {
 			updateRenderedItems();
@@ -309,21 +307,17 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 	);
 	const handleScroll = React.useCallback(
 		() => {
-			window.requestAnimationFrame(() => {
-				updateRenderedItems();
-			});
+			updateRenderedItemsDebounced();
 		},
-		[updateRenderedItems]
+		[updateRenderedItemsDebounced]
 	);
 	const mutationObserver = React.useMemo(
 		() => {
 			return new MutationObserver(() => {
-				window.requestAnimationFrame(() => {
-					updateRenderedItems();
-				});
+				updateRenderedItemsDebounced();
 			});
 		},
-		[updateRenderedItems]
+		[updateRenderedItemsDebounced]
 	);
 	React.useEffect(
 		() => {
