@@ -28,6 +28,7 @@ export interface Props {
 }
 
 interface ItemDimensions {
+	scrollTop: number;
 	top: number;
 	height: number;
 }
@@ -51,6 +52,7 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 		},
 		[willUnmountFns]
 	);
+
 	const shouldItemRender = React.useCallback(
 		(index: number): boolean => {
 			return shouldRenderIndices.has(index);
@@ -58,6 +60,7 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 		[shouldRenderIndices]
 	);
 	(window as any).shouldRenderIndices = shouldRenderIndices; // DEBUG
+
 	const getItemDimensions = React.useCallback(
 		(index: number): ItemDimensions | null => {
 			const dimensions = listItemDimensions.get(index);
@@ -69,45 +72,129 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 		},
 		[listItemDimensions]
 	);
+
+	const getContainerPadding = React.useCallback(
+		() => {
+			if (!listContainerRef.current) return 0;
+			const basePadding = listContainerBaselinePaddingTopRef.current || 0;
+			return parseFloat(listContainerRef.current.style.paddingTop || '0px') - basePadding;
+		},
+		[listContainerBaselinePaddingTopRef, listContainerRef]
+	);
+
+	const calcScrollHeight = React.useCallback(
+		() => {
+			const scrollParentNode = scrollParentRef.current;
+			if (!scrollParentNode) return 0;
+			return scrollParentNode === window
+				? window.innerHeight
+				: (scrollParentNode as HTMLElement).getClientRects()[0].height;
+		},
+		[scrollParentRef]
+	);
+
+	const calcContainerDimensions = React.useCallback(
+		(): ItemDimensions => {
+			const empty = { top: 0, height: 0, scrollTop: 0 };
+			const node = listContainerRef.current;
+			if (!node) return empty;
+			const rect = node.getClientRects()[0];
+			if (!rect) return empty;
+			return { top: rect.top, height: rect.height, scrollTop: 0 };
+		},
+		[listContainerRef]
+	);
+
+	const getScrollTop = React.useCallback(
+		() => {
+			if (scrollParentRef.current === null) {
+				return 0;
+			}
+			let scrollTop = 0;
+			if (scrollParentRef.current === window) {
+				scrollTop = window.scrollY;
+			} else {
+				scrollTop = (scrollParentRef.current as HTMLElement).scrollTop;
+			}
+			return scrollTop;
+		},
+		[scrollParentRef]
+	);
+
+	const calcItemDimensions = React.useCallback(
+		(index: number): ItemDimensions | null => {
+			const scrollTop = getScrollTop();
+			const prevDimensions = listItemDimensions.get(index);
+			let nextDimensions: ItemDimensions | null = null;
+			if (prevDimensions && prevDimensions.height > 0) {
+				nextDimensions = {
+					top: prevDimensions.top - scrollTop + prevDimensions.scrollTop,
+					height: prevDimensions.height,
+					scrollTop
+				};
+				return nextDimensions;
+			}
+
+			const node = listItemsRef.current[index];
+			if (!node) return null;
+			const rect = node.getClientRects()[0];
+			if (!rect) return null;
+			const style = window.getComputedStyle(node);
+			const margin =
+				parseFloat(style.getPropertyValue('margin-top')) + parseFloat(style.getPropertyValue('margin-bottom'));
+			const dimensions = { top: rect.top, height: rect.height + margin, scrollTop };
+			listItemDimensions.set(index, dimensions);
+			// if (prevDimensions && nextDimensions) {
+			// 	if (dimensions.top !== nextDimensions.top) {
+			// 		console.log(
+			// 			{ current: dimensions.top, prev: prevDimensions.top, next: nextDimensions.top },
+			// 			scrollTop,
+			// 			prevDimensions.scrollTop
+			// 		);
+			// 	}
+			// }
+			return dimensions;
+		},
+		[getScrollTop, listItemDimensions, listItemsRef]
+	);
+
+	const renderIndex = React.useCallback(
+		(index: number, callback: () => void) => {
+			if (shouldRenderIndices.has(index)) {
+				// index already rendered
+				callback();
+				return;
+			}
+			const renderItem = listItemForceUpdateFns.get(index);
+			if (!renderItem) {
+				return;
+			}
+			shouldRenderIndices.add(index);
+			// updateContainerPadding();
+			renderItem(callback);
+		},
+		[listItemForceUpdateFns, shouldRenderIndices]
+	);
+
+	const unRenderIndex = React.useCallback(
+		(index: number, callback: () => void) => {
+			if (!shouldRenderIndices.has(index)) {
+				// index not currently rendered
+				callback();
+				return;
+			}
+			const renderItem = listItemForceUpdateFns.get(index);
+			if (!renderItem) return;
+			shouldRenderIndices.delete(index);
+			// updateContainerPadding();
+			renderItem(callback);
+		},
+		[listItemForceUpdateFns, shouldRenderIndices]
+	);
+
 	const updateRenderedItems = React.useCallback(
 		() => {
 			// TODO: esimate how tall the listContainer should be to render all the items we have and add padding on the bottom for items not currently rendered (so the scroll bar is a more accurate size)
-
-			const getContainerPadding = () => {
-				if (!listContainerRef.current) return 0;
-				const basePadding = listContainerBaselinePaddingTopRef.current || 0;
-				return parseFloat(listContainerRef.current.style.paddingTop || '0px') - basePadding;
-			};
-
-			const calcScrollHeight = () => {
-				const scrollParentNode = scrollParentRef.current;
-				if (!scrollParentNode) return 0;
-				return scrollParentNode === window
-					? window.innerHeight
-					: (scrollParentNode as HTMLElement).getClientRects()[0].height;
-			};
-
-			const calcContainerDimensions = (): ItemDimensions => {
-				const empty = { top: 0, height: 0 };
-				const node = listContainerRef.current;
-				if (!node) return empty;
-				const rect = node.getClientRects()[0];
-				if (!rect) return empty;
-				return { top: rect.top, height: rect.height };
-			};
-
-			const calcItemDimensions = (index: number): ItemDimensions | null => {
-				const node = listItemsRef.current[index];
-				if (!node) return null;
-				const rect = node.getClientRects()[0];
-				if (!rect) return null;
-				const style = window.getComputedStyle(node);
-				const margin =
-					parseFloat(style.getPropertyValue('margin-top')) + parseFloat(style.getPropertyValue('margin-bottom'));
-				const dimensions = { top: rect.top, height: rect.height + margin };
-				listItemDimensions.set(index, dimensions);
-				return dimensions;
-			};
 
 			// const updateContainerPadding = () => {
 			// 	if (!listContainerRef.current) return;
@@ -124,34 +211,6 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 			// 	}
 			// 	listContainerRef.current.style.paddingTop = `${padding}px`;
 			// };
-
-			const renderIndex = (index: number, callback: () => void) => {
-				if (shouldRenderIndices.has(index)) {
-					// index already rendered
-					callback();
-					return;
-				}
-				const renderItem = listItemForceUpdateFns.get(index);
-				if (!renderItem) {
-					return;
-				}
-				shouldRenderIndices.add(index);
-				// updateContainerPadding();
-				renderItem(callback);
-			};
-
-			const unRenderIndex = (index: number, callback: () => void) => {
-				if (!shouldRenderIndices.has(index)) {
-					// index not currently rendered
-					callback();
-					return;
-				}
-				const renderItem = listItemForceUpdateFns.get(index);
-				if (!renderItem) return;
-				shouldRenderIndices.delete(index);
-				// updateContainerPadding();
-				renderItem(callback);
-			};
 
 			// const renderDevFrame = (frame: number, p: any) => {
 			// 	const elementID = `dev-${frame}`;
@@ -170,14 +229,12 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 			// 	node.innerText = p.content || '';
 			// };
 
+			const containerDimensions = calcContainerDimensions();
+			const containerPadding = getContainerPadding();
+			const containerTop = containerDimensions.top - containerPadding;
+			const visibleTopY = Math.max(containerTop, 0);
+			const visibleBottomY = visibleTopY + calcScrollHeight();
 			const render = (fromIndex: number) => {
-				const containerDimensions = calcContainerDimensions();
-				const containerPadding = getContainerPadding();
-				const containerTop = containerDimensions.top - containerPadding;
-
-				const visibleTopY = Math.max(containerTop, 0);
-				const visibleBottomY = visibleTopY + calcScrollHeight();
-
 				const dimensions = calcItemDimensions(fromIndex);
 
 				// Make sure enough items are rendered to fill viewable area
@@ -234,15 +291,14 @@ export default function WindowedList({ threshold = 0, children }: Props) {
 			render(0);
 		},
 		[
-			listContainerBaselinePaddingTopRef,
-			listContainerRef,
-			listItemDimensions,
-			listItemForceUpdateFns,
-			listItemsRef,
+			calcContainerDimensions,
+			calcItemDimensions,
+			calcScrollHeight,
+			getContainerPadding,
 			maxRenderedIndexRef,
-			scrollParentRef,
-			shouldRenderIndices,
-			threshold
+			renderIndex,
+			threshold,
+			unRenderIndex
 		]
 	);
 	React.useLayoutEffect(
