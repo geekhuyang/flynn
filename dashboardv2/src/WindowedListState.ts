@@ -1,13 +1,3 @@
-export const testRef = {
-	enableDebug: false
-};
-
-function debug(cb: () => void) {
-	if (testRef.enableDebug) {
-		cb();
-	}
-}
-
 export default class WindowedListState {
 	public viewportHeight: number; // viewport height in px
 	public length: number; // size of list
@@ -38,6 +28,7 @@ export default class WindowedListState {
 	public calculateVisibleIndices(): void {
 		if (this.scrollTop === 0) {
 			this.visibleIndexTop = 0;
+			this.paddingTop = 0;
 		} else {
 			let visibleIndexTop = 0;
 			let paddingTop = 0;
@@ -90,7 +81,7 @@ export default class WindowedListState {
 			// scrolled up
 			let visibleIndexTop = this.visibleIndexTop;
 			let paddingTop = this.paddingTop;
-			for (let i = visibleIndexTop; i >= 0; i--) {
+			for (let i = visibleIndexTop - 1; i >= 0; i--) {
 				const height = this.getItemHeight(i);
 				if (paddingTop > scrollTop) {
 					paddingTop = paddingTop - height;
@@ -150,13 +141,63 @@ export default class WindowedListState {
 
 	// sets item height and re-calculates vidibleIndexTop/visibleLength and padding
 	public updateHeightAtIndex(index: number, height: number): void {
+		const prevHeight = this.getItemHeight(index);
 		this.heights.set(index, height);
 
-		// TODO: calculate based on delta
-		this.calculateVisibleIndices();
+		if (index < this.visibleIndexTop) {
+			// item is part of padding top
+			this.paddingTop = this.paddingTop - prevHeight + height;
+			while (this.paddingTop > this.scrollTop) {
+				// item has pushed one or more items into view
+				this.visibleIndexTop--;
+				this.visibleLength++;
+				this.paddingTop = this.paddingTop - this.getItemHeight(this.visibleIndexTop);
+			}
+			return;
+		}
+
+		let visibleIndexBottom = this.visibleIndexTop + this.visibleLength - 1;
+
+		if (index > visibleIndexBottom) {
+			// item is part of padding bottom
+			this.paddingBottom = this.paddingBottom - prevHeight + height;
+			return;
+		}
+
+		// item is in the viewport
+
+		const prevVisibleIndexBottom = visibleIndexBottom;
+		let visibleLength = 0;
+		let visibleHeight = 0;
+		for (let i = this.visibleIndexTop; i < this.length; i++) {
+			if (visibleHeight < this.viewportHeight) {
+				visibleHeight = visibleHeight + this.getItemHeight(i);
+				visibleLength++;
+			} else {
+				break;
+			}
+		}
+		visibleIndexBottom = this.visibleIndexTop + visibleLength - 1;
+		this.visibleLength = visibleLength;
+
+		if (visibleIndexBottom === prevVisibleIndexBottom) {
+			// the same number items are in the viewport
+			return;
+		}
+		if (visibleIndexBottom > prevVisibleIndexBottom) {
+			// more items are in the viewport
+			this.paddingBottom = this.paddingBottom - this.getItemRangeHeight(prevVisibleIndexBottom + 1, visibleIndexBottom);
+		} else {
+			// less items are in the viewport
+			this.paddingBottom = this.paddingBottom + this.getItemRangeHeight(visibleIndexBottom + 1, prevVisibleIndexBottom);
+		}
 	}
 
 	private getItemHeight(index: number): number {
+		if (index > this.length - 1) {
+			// index is out of range
+			return 0;
+		}
 		return this.heights.get(index) || this.defaultHeight;
 	}
 
@@ -169,6 +210,6 @@ export default class WindowedListState {
 	}
 }
 
-// TODO: write tests to make sure WindowedListState works as expected
 // TODO: re-write WindowedList to use WindowedListState
+// TODO: implement threshold
 // TODO: implement sticky items (items that are always rendered)
