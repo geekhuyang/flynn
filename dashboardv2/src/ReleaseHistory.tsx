@@ -28,11 +28,14 @@ import Loading from './Loading';
 import CreateDeployment from './CreateDeployment';
 import CreateScaleRequestComponent from './CreateScaleRequest';
 import ReleaseComponent from './Release';
+import WindowedListState from './WindowedListState';
 import WindowedList, { WindowedListItem } from './WindowedList';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
 
 interface MapHistoryProps<T> {
+	startIndex: number;
+	length: number;
 	deployments: ExpandedDeployment[];
 	scales: ScaleRequest[];
 	renderDate: (key: string, date: Date) => T;
@@ -68,8 +71,16 @@ function _last<T>(arr: Array<T>): T {
 	return arr[arr.length - 1];
 }
 
-function mapHistory<T>({ deployments, scales, renderRelease, renderScale, renderDate }: MapHistoryProps<T>): T[] {
-	const res = [] as T[];
+function mapHistory<T>({
+	startIndex,
+	length,
+	deployments,
+	scales,
+	renderRelease,
+	renderScale,
+	renderDate
+}: MapHistoryProps<T>): Array<T | null> {
+	const res = [] as Array<T | null>;
 	const dlen = deployments.length;
 	const slen = scales.length;
 	let i = 0;
@@ -84,15 +95,19 @@ function mapHistory<T>({ deployments, scales, renderRelease, renderScale, render
 		const s = scales[si];
 		const st = s ? (s.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
 		let prevDate = date;
-		let el: T;
+		let el: T | null = null;
 		if ((dt && st && dt > st) || (dt && !st)) {
 			date = roundedDate(dt);
-			el = renderRelease(_last(d.getName().split('/')), [r as Release, pr], i);
+			if (i >= startIndex && i < startIndex + length - 1) {
+				el = renderRelease(_last(d.getName().split('/')), [r as Release, pr], i);
+			}
 			di++;
 			i++;
 		} else if (st) {
 			date = roundedDate(st);
-			el = renderScale(_last(s.getName().split('/')), s, i);
+			if (i >= startIndex && i < startIndex + length - 1) {
+				el = renderScale(_last(s.getName().split('/')), s, i);
+			}
 			si++;
 			i++;
 		} else {
@@ -100,7 +115,7 @@ function mapHistory<T>({ deployments, scales, renderRelease, renderScale, render
 		}
 
 		if (prevDate === null || date < prevDate) {
-			res.push(renderDate(date.toDateString(), date));
+			// res.push(renderDate(date.toDateString(), date));
 		}
 
 		res.push(el);
@@ -460,9 +475,16 @@ function ReleaseHistory({ appName }: Props) {
 		setNextScale(null);
 	};
 
+	const windowedListState = React.useMemo(() => new WindowedListState(), []);
+	// windowedListState.onChange(() => {
+	// // force update
+	// });
+
 	if (deploymentsLoading || scalesLoading || currentScaleLoading || appLoading) {
 		return <Loading />;
 	}
+
+	windowedListState.length = scales.length + deployments.length;
 
 	return (
 		<>
@@ -494,9 +516,11 @@ function ReleaseHistory({ appName }: Props) {
 
 			<form onSubmit={submitHandler}>
 				<Box tag="ul" style={{ position: 'relative' }}>
-					<WindowedList threshold={700}>
+					<WindowedList state={windowedListState}>
 						{(windowedListItemProps) => {
 							return mapHistory({
+								startIndex: windowedListState.visibleIndexTop,
+								length: windowedListState.visibleLength,
 								deployments,
 								scales: isScaleEnabled ? scales : [],
 								renderDate: (key, date) => <ReleaseHistoryDateHeader key={key} date={date} tag="li" margin="xsmall" />,

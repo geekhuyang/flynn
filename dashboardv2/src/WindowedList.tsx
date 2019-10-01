@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { debounce } from 'lodash';
 
+import WindowedListState from './WindowedListState';
+
 function findScrollParent(node: HTMLElement | null): HTMLElement | Window {
 	while (node) {
 		switch (window.getComputedStyle(node).overflow) {
@@ -24,6 +26,7 @@ export interface ChildrenProps {
 }
 
 export interface Props {
+	state: WindowedListState;
 	threshold?: number;
 	children: (props: ChildrenProps) => React.ReactNode;
 }
