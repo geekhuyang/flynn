@@ -10,16 +10,14 @@ import ProcessScale from './ProcessScale';
 import RightOverlay from './RightOverlay';
 import { default as useRouter } from './useRouter';
 import useApp from './useApp';
-import useDeployments from './useDeployments';
+import useReleaseHistory from './useReleaseHistory';
 import useAppScale from './useAppScale';
-import useAppScales from './useAppScales';
 import useErrorHandler from './useErrorHandler';
-import { listDeploymentsRequestFilterType, setNameFilters } from './client';
+import { listDeploymentsRequestFilterType, setNameFilters, ReleaseHistoryItem } from './client';
 import {
 	Release,
 	ReleaseType,
 	ReleaseTypeMap,
-	ExpandedDeployment,
 	ScaleRequest,
 	CreateScaleRequest,
 	ScaleRequestState
@@ -36,8 +34,7 @@ import protoMapReplace from './util/protoMapReplace';
 interface MapHistoryProps<T> {
 	startIndex: number;
 	length: number;
-	deployments: ExpandedDeployment[];
-	scales: ScaleRequest[];
+	items: ReleaseHistoryItem[];
 	renderDate: (key: string, date: Date) => T;
 	renderRelease: (key: string, releases: [Release, Release | null], index: number) => T;
 	renderScale: (key: string, scaleRequest: ScaleRequest, index: number) => T;
@@ -74,52 +71,39 @@ function _last<T>(arr: Array<T>): T {
 function mapHistory<T>({
 	startIndex,
 	length,
-	deployments,
-	scales,
+	items,
 	renderRelease,
 	renderScale,
 	renderDate
 }: MapHistoryProps<T>): Array<T | null> {
 	const res = [] as Array<T | null>;
-	const dlen = deployments.length;
-	const slen = scales.length;
-	let i = 0;
-	let di = 0;
-	let si = 0;
+	const len = items.length;
 	let date: Date | null = null;
-	while (di < dlen || si < slen) {
-		let d = deployments[di];
-		let r = d ? d.getNewRelease() || null : null;
-		let pr = d ? d.getOldRelease() || null : null;
-		const dt = d ? (d.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
-		const s = scales[si];
-		const st = s ? (s.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
+	for (let i = 0; i < len; i++) {
+		const item = items[i];
 		let prevDate = date;
 		let el: T | null = null;
-		if ((dt && st && dt > st) || (dt && !st)) {
-			date = roundedDate(dt);
-			if (i >= startIndex && i < startIndex + length - 1) {
-				el = renderRelease(_last(d.getName().split('/')), [r as Release, pr], i);
-			}
-			di++;
-			i++;
-		} else if (st) {
-			date = roundedDate(st);
-			if (i >= startIndex && i < startIndex + length - 1) {
-				el = renderScale(_last(s.getName().split('/')), s, i);
-			}
-			si++;
-			i++;
+		if (item.isScaleRequest) {
+			const s = item.getScaleRequest();
+			date = roundedDate((s.getCreateTime() as timestamp_pb.Timestamp).toDate());
+			el = renderScale(_last(s.getName().split('/')), s, i);
 		} else {
-			break;
+			// it must be a deployment
+			const d = item.getDeployment();
+			const r = d.getNewRelease() || null;
+			const pr = d.getOldRelease() || null;
+			date = roundedDate((d.getCreateTime() as timestamp_pb.Timestamp).toDate());
+			el = renderRelease(_last(d.getName().split('/')), [r as Release, pr], i);
 		}
 
 		if (prevDate === null || date < prevDate) {
+			// TODO(jvatic): this should render as a WindowedList sticky item:
 			// res.push(renderDate(date.toDateString(), date));
 		}
 
 		res.push(el);
 	}
+
 	return res;
 }
 
@@ -351,7 +335,7 @@ function ReleaseHistory({ appName }: Props) {
 		[rhf]
 	);
 
-	// Stream deployments
+	// Stream release history (scales and deployments coalesced together)
 	const streamDeploymentsEnabled = isCodeReleaseEnabled || isConfigReleaseEnabled;
 	const deploymentReqModifiers = React.useMemo(
 		() => {
@@ -366,28 +350,20 @@ function ReleaseHistory({ appName }: Props) {
 		},
 		[appName, isCodeReleaseEnabled, isConfigReleaseEnabled]
 	);
-	const { deployments, loading: deploymentsLoading, error: deploymentsError } = useDeployments(
+	const { items, loading: releaseHistoryLoading, error: releaseHistoryError } = useReleaseHistory(
+		appName,
+		[],
 		deploymentReqModifiers,
+		isScaleEnabled,
 		streamDeploymentsEnabled
 	);
 	React.useEffect(
 		() => {
-			if (deploymentsError) {
-				handleError(deploymentsError);
+			if (releaseHistoryError) {
+				handleError(releaseHistoryError);
 			}
 		},
-		[deploymentsError, handleError]
-	);
-
-	// Get scale requests
-	const { scales, loading: scalesLoading, error: scalesError } = useAppScales(appName, isScaleEnabled, []);
-	React.useEffect(
-		() => {
-			if (scalesError) {
-				handleError(scalesError);
-			}
-		},
-		[handleError, scalesError]
+		[handleError, releaseHistoryError]
 	);
 
 	// Get current formation
@@ -415,7 +391,8 @@ function ReleaseHistory({ appName }: Props) {
 			if (isDeploying) return;
 
 			if (selectedResourceType === SelectedResourceType.ScaleRequest) {
-				const sr = scales.find((sr) => sr.getName() === selectedItemName);
+				const item = items.find((sr) => sr.getName() === selectedItemName);
+				const sr = item && item.isScaleRequest ? item.getScaleRequest() : null;
 				if (sr) {
 					const diff = protoMapDiff((currentScale as ScaleRequest).getNewProcessesMap(), sr.getNewProcessesMap());
 					setSelectedScaleRequestDiff(diff.length ? diff : emptyScaleRequestDiff);
@@ -424,7 +401,7 @@ function ReleaseHistory({ appName }: Props) {
 			}
 			setSelectedScaleRequestDiff(emptyScaleRequestDiff);
 		},
-		[currentScale, emptyScaleRequestDiff, isDeploying, scales, selectedItemName, selectedResourceType]
+		[currentScale, emptyScaleRequestDiff, isDeploying, items, selectedItemName, selectedResourceType]
 	);
 
 	const [nextScale, setNextScale] = React.useState<CreateScaleRequest | null>(null);
@@ -438,7 +415,8 @@ function ReleaseHistory({ appName }: Props) {
 
 		if (selectedResourceType === SelectedResourceType.ScaleRequest) {
 			// It's a scale request we're deploying
-			const sr = scales.find((sr) => sr.getName() === selectedItemName);
+			const item = items.find((sr) => sr.getName() === selectedItemName);
+			const sr = item && item.isScaleRequest ? item.getScaleRequest() : null;
 			const nextScale = new CreateScaleRequest();
 			if (!sr) {
 				return;
@@ -480,11 +458,11 @@ function ReleaseHistory({ appName }: Props) {
 	// // force update
 	// });
 
-	if (deploymentsLoading || scalesLoading || currentScaleLoading || appLoading) {
+	if (releaseHistoryLoading || currentScaleLoading || appLoading) {
 		return <Loading />;
 	}
 
-	windowedListState.length = scales.length + deployments.length;
+	windowedListState.length = items.length;
 
 	return (
 		<>
@@ -521,8 +499,7 @@ function ReleaseHistory({ appName }: Props) {
 							return mapHistory({
 								startIndex: windowedListState.visibleIndexTop,
 								length: windowedListState.visibleLength,
-								deployments,
-								scales: isScaleEnabled ? scales : [],
+								items,
 								renderDate: (key, date) => <ReleaseHistoryDateHeader key={key} date={date} tag="li" margin="xsmall" />,
 								renderRelease: (key, [r, p], index) => (
 									<WindowedListItem key={key} index={index} {...windowedListItemProps}>

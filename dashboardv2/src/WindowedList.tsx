@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { debounce } from 'lodash';
 
+// TODO: Finish refactoring to use WindowedListState (there's a bunch of old code in here that's not doing anything)
+
 import WindowedListState from './WindowedListState';
 
 function findScrollParent(node: HTMLElement | null): HTMLElement | Window {

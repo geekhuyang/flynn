@@ -40,6 +40,11 @@ export interface Client {
 		cb: DeploymentsCallback,
 		...reqModifiers: RequestModifier<StreamDeploymentsRequest>[]
 	) => CancelFunc;
+	streamReleaseHistory: (
+		cb: ReleaseHistoryCallback,
+		scaleReqModifiers: RequestModifier<StreamScalesRequest>[],
+		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[]
+	) => CancelFunc;
 
 	// write API
 	updateApp: (app: App, cb: AppCallback) => CancelFunc;
@@ -63,6 +68,45 @@ export type ReleaseCallback = (release: Release, error: ErrorWithCode | null) =>
 export type ErrorCallback = (error: ErrorWithCode | null) => void;
 export type ScaleRequestsCallback = (res: StreamScalesResponse, error: ErrorWithCode | null) => void;
 export type DeploymentsCallback = (res: StreamDeploymentsResponse, error: ErrorWithCode | null) => void;
+export type ReleaseHistoryCallback = (res: StreamReleaseHistoryResponse, error: ErrorWithCode | null) => void;
+
+export class ReleaseHistoryItem {
+	private _scale: ScaleRequest | null;
+	private _deployment: ExpandedDeployment | null;
+
+	public isScaleRequest: boolean;
+	public isDeployment: boolean;
+
+	constructor(scale: ScaleRequest | null, deployment: ExpandedDeployment | null) {
+		this._scale = scale;
+		this.isScaleRequest = !!scale;
+		this._deployment = deployment;
+		this.isDeployment = !!deployment;
+	}
+
+	public getName(): string {
+		if (this._scale) {
+			return this._scale.getName();
+		}
+		if (this._deployment) {
+			return this._deployment.getName();
+		}
+		return '';
+	}
+
+	public getScaleRequest(): ScaleRequest {
+		return this._scale || new ScaleRequest();
+	}
+
+	public getDeployment(): ExpandedDeployment {
+		return this._deployment || new ExpandedDeployment();
+	}
+}
+
+export interface StreamReleaseHistoryResponse {
+	getItemsList: () => ReleaseHistoryItem[];
+	getNextPageToken: () => string;
+}
 
 export type RequestModifier<T> = {
 	(req: T): void;
@@ -544,6 +588,26 @@ class _Client implements Client {
 			cb(new StreamDeploymentsResponse(), error);
 		});
 		return buildCancelFunc(stream);
+	}
+
+	public streamReleaseHistory(
+		cb: ReleaseHistoryCallback,
+		scaleReqModifiers: RequestModifier<StreamScalesRequest>[],
+		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[]
+	): CancelFunc {
+		const cancelStreamScales = this.streamScales((res: StreamScalesResponse, error: ErrorWithCode | null) => {
+			// TODO: Merge with deployments in common wrapper type and invoke cb
+		}, ...scaleReqModifiers);
+		const cancelStreamDeployments = this.streamDeployments(
+			(res: StreamDeploymentsResponse, error: ErrorWithCode | null) => {
+				// TODO: Merge with scales in common wrapper type and invoke cb
+			},
+			...deploymentReqModifiers
+		);
+		return () => {
+			cancelStreamScales();
+			cancelStreamDeployments();
+		};
 	}
 
 	public updateApp(app: App, cb: AppCallback): CancelFunc {
