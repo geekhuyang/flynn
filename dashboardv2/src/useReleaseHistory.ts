@@ -13,6 +13,11 @@ import { StreamScalesRequest, StreamDeploymentsRequest } from './generated/contr
 const emptyScaleReqModifiersArray = [] as RequestModifier<StreamScalesRequest>[];
 const emptyDeploymentReqModifiersArray = [] as RequestModifier<StreamDeploymentsRequest>[];
 
+interface NextPageTokens {
+	scales: string;
+	deployments: string;
+}
+
 export default function useReleaseHistory(
 	appName: string,
 	scaleReqModifiers: RequestModifier<StreamScalesRequest>[],
@@ -24,7 +29,7 @@ export default function useReleaseHistory(
 	const [loading, setLoading] = React.useState(scalesEnabled || deploymentsEnabled);
 	const [items, setItems] = React.useState<ReleaseHistoryItem[]>([]);
 	const [error, setError] = React.useState<Error | null>(null);
-	const [nextPageToken, setNextPageToken] = React.useState('');
+	const [nextPageToken, setNextPageToken] = React.useState<NextPageTokens>({ scales: '', deployments: '' });
 	if (scaleReqModifiers.length === 0) {
 		scaleReqModifiers = emptyScaleReqModifiersArray;
 	}
@@ -44,7 +49,10 @@ export default function useReleaseHistory(
 						return;
 					}
 					setItems(res.getItemsList());
-					setNextPageToken(res.getNextPageToken());
+					setNextPageToken({
+						scales: res.getScaleRequestsNextPageToken(),
+						deployments: res.getDeploymentsNextPageToken()
+					});
 					setLoading(false);
 					setError(null);
 				},

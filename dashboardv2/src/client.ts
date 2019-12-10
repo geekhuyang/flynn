@@ -1,6 +1,7 @@
 import { grpc } from '@improbable-eng/grpc-web';
 import { Timestamp } from 'google-protobuf/google/protobuf/timestamp_pb';
 import { BrowserHeaders } from 'browser-headers';
+import * as timestamp_pb from 'google-protobuf/google/protobuf/timestamp_pb';
 
 import Config, { PrivateConfig } from './config';
 import { ControllerClient, ServiceError, Status, ResponseStream } from './generated/controller_pb_service';
@@ -103,9 +104,85 @@ export class ReleaseHistoryItem {
 	}
 }
 
-export interface StreamReleaseHistoryResponse {
-	getItemsList: () => ReleaseHistoryItem[];
-	getNextPageToken: () => string;
+export class StreamReleaseHistoryResponse {
+	private _scalesRes: StreamScalesResponse | null;
+	private _deploymentsRes: StreamDeploymentsResponse | null;
+	private _items: ReleaseHistoryItem[];
+	private _itemsBuilt: boolean;
+
+	constructor(scalesRes: StreamScalesResponse | null, deploymentsRes: StreamDeploymentsResponse | null) {
+		this._scalesRes = scalesRes;
+		this._deploymentsRes = deploymentsRes;
+		this._items = [];
+		this._itemsBuilt = false;
+	}
+
+	public getItemsList(): ReleaseHistoryItem[] {
+		if (!this._itemsBuilt) {
+			this._buildItems();
+		}
+		return this._items;
+	}
+
+	public getDeploymentsList(): ExpandedDeployment[] {
+		if (this._deploymentsRes) {
+			return this._deploymentsRes.getDeploymentsList();
+		}
+		return [];
+	}
+
+	public getScaleRequestsList(): ScaleRequest[] {
+		if (this._scalesRes) {
+			return this._scalesRes.getScaleRequestsList();
+		}
+		return [];
+	}
+
+	public getDeploymentsNextPageToken(): string {
+		if (this._deploymentsRes) {
+			return this._deploymentsRes.getNextPageToken();
+		}
+		return '';
+	}
+
+	public getScaleRequestsNextPageToken(): string {
+		if (this._scalesRes) {
+			return this._scalesRes.getNextPageToken();
+		}
+		return '';
+	}
+
+	private _buildItems(): void {
+		const items = [] as ReleaseHistoryItem[];
+		const deployments = this.getDeploymentsList();
+		const scales = this.getScaleRequestsList();
+		const dlen = deployments.length;
+		const slen = scales.length;
+		let di = 0;
+		let si = 0;
+		while (di < dlen || si < slen) {
+			const d = deployments[di];
+			const dt = d ? (d.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
+			const s = scales[si];
+			const st = s ? (s.getCreateTime() as timestamp_pb.Timestamp).toDate() : null;
+			let item: ReleaseHistoryItem;
+
+			if ((dt && st && dt > st) || (dt && !st)) {
+				item = new ReleaseHistoryItem(null, d);
+				di++;
+			} else if (st) {
+				item = new ReleaseHistoryItem(s, null);
+				si++;
+			} else {
+				break;
+			}
+
+			items.push(item);
+		}
+
+		this._items = items;
+		this._itemsBuilt = true;
+	}
 }
 
 export type RequestModifier<T> = {
@@ -595,15 +672,22 @@ class _Client implements Client {
 		scaleReqModifiers: RequestModifier<StreamScalesRequest>[],
 		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[]
 	): CancelFunc {
+		let streamScalesRes: StreamScalesResponse;
+		let streamDeploymentsRes: StreamDeploymentsResponse;
+
 		const cancelStreamScales = this.streamScales((res: StreamScalesResponse, error: ErrorWithCode | null) => {
-			// TODO: Merge with deployments in common wrapper type and invoke cb
+			streamScalesRes = res;
+			cb(new StreamReleaseHistoryResponse(streamScalesRes, streamDeploymentsRes), error);
 		}, ...scaleReqModifiers);
+
 		const cancelStreamDeployments = this.streamDeployments(
 			(res: StreamDeploymentsResponse, error: ErrorWithCode | null) => {
-				// TODO: Merge with scales in common wrapper type and invoke cb
+				streamDeploymentsRes = res;
+				cb(new StreamReleaseHistoryResponse(streamScalesRes, res), error);
 			},
 			...deploymentReqModifiers
 		);
+
 		return () => {
 			cancelStreamScales();
 			cancelStreamDeployments();

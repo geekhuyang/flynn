@@ -462,7 +462,10 @@ function ReleaseHistory({ appName }: Props) {
 		return <Loading />;
 	}
 
+	// TODO(jvatic): move this logic somewhere more appropriate
+	windowedListState.viewportHeight = 200; // TODO(jvatic): actually calculate this and update on resize
 	windowedListState.length = items.length;
+	windowedListState.calculateVisibleIndices();
 
 	return (
 		<>
