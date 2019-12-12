@@ -462,7 +462,6 @@ function ReleaseHistory({ appName }: Props) {
 	React.useEffect(
 		() => {
 			return windowedListState.onChange((state: WindowedListState) => {
-				// console.log('windowedListState.onChange', state);
 				const paddingTopNode = paddingTopRef.current;
 				if (paddingTopNode) {
 					paddingTopNode.style.height = state.paddingTop + 'px';
@@ -479,9 +478,15 @@ function ReleaseHistory({ appName }: Props) {
 		[windowedListState]
 	);
 
+	const scrollParentRef = React.useRef<HTMLElement>();
+
 	React.useLayoutEffect(
 		() => {
-			windowedListState.viewportHeight = 400; // TODO(jvatic): actually calculate this and update on resize
+			const scrollParentNode = scrollParentRef.current;
+			if (scrollParentNode) {
+				const rect = scrollParentNode.getBoundingClientRect();
+				windowedListState.viewportHeight = rect.height;
+			}
 			windowedListState.length = items.length;
 			windowedListState.defaultHeight = 150;
 			windowedListState.calculateVisibleIndices();
@@ -523,6 +528,7 @@ function ReleaseHistory({ appName }: Props) {
 
 			<form onSubmit={submitHandler}>
 				<Box
+					ref={scrollParentRef as any}
 					tag="ul"
 					flex={false}
 					overflow={{ vertical: 'scroll', horizontal: 'auto' }}

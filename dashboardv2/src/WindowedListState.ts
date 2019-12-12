@@ -17,6 +17,7 @@ export default class WindowedListState {
 	private heights: Map<number, number>; // index => height
 	private subscribers: Set<CallbackFunction>;
 	private handleChange: () => void;
+	private visibleIndicesCalculated: boolean;
 
 	constructor() {
 		this.viewportHeight = 0;
@@ -32,6 +33,7 @@ export default class WindowedListState {
 		this.heights = new Map<number, number>();
 		this.subscribers = new Set<CallbackFunction>();
 		this.handleChange = debounce(this._handleChange, 0, { maxWait: 30 });
+		this.visibleIndicesCalculated = false;
 	}
 
 	public onChange(cb: CallbackFunction): UnsubscribeFunction {
@@ -79,17 +81,19 @@ export default class WindowedListState {
 		}
 		this.paddingBottom = paddingBottom;
 
+		this.visibleIndicesCalculated = true;
 		this.handleChange();
 	}
 
 	// sets scrollTop and re-calculates vidibleIndexTop/visibleLength and padding
-	// TODO(jvatic): There's a bug here somewhere
 	public updateScrollPosition(scrollTop: number): void {
-		const prevScrollTop = this.scrollTop;
 		const prevVisibleIndexTop = this.visibleIndexTop;
 		const prevVisibleLength = this.visibleLength;
+		const prevScrollTop = this.scrollTop;
 		const scrollTopDelta = scrollTop - prevScrollTop;
 		this.scrollTop = scrollTop;
+
+		if (!this.visibleIndicesCalculated) return this.calculateVisibleIndices();
 
 		if (scrollTopDelta === 0) {
 			// no change
@@ -117,7 +121,7 @@ export default class WindowedListState {
 			let paddingTop = this.paddingTop;
 			for (let i = visibleIndexTop; i < this.length; i++) {
 				const height = this.getItemHeight(i);
-				if (paddingTop + height < scrollTopDelta) {
+				if (paddingTop + height < scrollTop) {
 					paddingTop = paddingTop + height;
 					visibleIndexTop++;
 				} else {
@@ -140,7 +144,7 @@ export default class WindowedListState {
 		}
 		this.visibleLength = visibleLength;
 
-		if (prevVisibleIndexTop === this.visibleIndexTop) {
+		if (prevVisibleIndexTop === this.visibleIndexTop && prevVisibleLength === this.visibleLength) {
 			// no change
 			return;
 		}

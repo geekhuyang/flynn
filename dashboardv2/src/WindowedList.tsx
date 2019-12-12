@@ -1,7 +1,4 @@
 import * as React from 'react';
-import { debounce } from 'lodash';
-
-// TODO: Finish refactoring to use WindowedListState (there's a bunch of old code in here that's not doing anything)
 
 import WindowedListState from './WindowedListState';
 
@@ -19,10 +16,8 @@ function findScrollParent(node: HTMLElement | null): HTMLElement | Window {
 	return window;
 }
 
-type ForceUpdateFunction = (callback: () => void) => void;
-
 export interface ChildrenProps {
-	onItemRender: (index: number, node: HTMLElement | null, foceUpdate: ForceUpdateFunction) => void;
+	onItemRender: (index: number, node: HTMLElement | null) => void;
 	shouldItemRender: (index: number) => boolean;
 	getItemDimensions: (index: number) => ItemDimensions | null;
 }
@@ -39,8 +34,7 @@ interface ItemDimensions {
 
 export default function WindowedList({ state, children }: Props) {
 	const itemDimensions = React.useMemo(() => new Map<number, ItemDimensions | null>(), []);
-	const itemRefs = React.useMemo(() => new Map<number, HTMLElement>(), []);
-	const itemRenderFns = React.useMemo(() => new Map<number, ForceUpdateFunction>(), []);
+	const itemResizeObservers = React.useMemo(() => new Map<number, ResizeObserver>(), []);
 	const scrollParentRef = React.useMemo<{ current: HTMLElement | Window | null }>(() => ({ current: null }), []);
 
 	const willUnmountFns = React.useMemo<Array<() => void>>(() => [], []);
@@ -81,38 +75,38 @@ export default function WindowedList({ state, children }: Props) {
 
 	const handleScroll = React.useCallback(
 		() => {
-			// const prevVisibleIndexTop = state.visibleIndexTop;
-			// const prevVisibleLength = state.visibleLength;
-
 			const scrollTop = getScrollTop();
 			state.updateScrollPosition(scrollTop);
-			state.calculateVisibleIndices(); // workaround bug with updateScrollPosition
-
-// 			const visibleIndexTop = state.visibleIndexTop;
-// 			const visibleLength = state.visibleLength;
-
-// 			console.log({ scrollTop, prevVisibleIndexTop, visibleIndexTop, prevVisibleLength, visibleLength });
 		},
 		[getScrollTop, state]
 	);
 
-	const handleResize = React.useCallback(() => {
-		// TODO(jvatic): this will need to trigger a reset of item dimensions
-	}, []);
-
 	const onItemRender = React.useCallback(
-		(index: number, node: HTMLElement | null, forceUpdate: ForceUpdateFunction) => {
+		(index: number, node: HTMLElement | null) => {
 			if (!node) {
 				return;
 			}
 
-			// keep track of node for each index so that we can recalculate item
-			// heights when the viewport changes size.
-			itemRefs.set(index, node);
-
-			// store render fns for each index so that we can take items in and out
-			// of the DOM as they become visible/invisible.
-			itemRenderFns.set(index, forceUpdate);
+			// keep track of any changes in the node dimensions
+			if (!itemResizeObservers.get(index)) {
+				const resizeObserver = new window.ResizeObserver((entries, observer) => {
+					for (let entry of entries) {
+						if (entry.target !== node) continue;
+						const prevDimensions = itemDimensions.get(index);
+						const dimensions = calcItemDimensions(node);
+						if (prevDimensions && dimensions && prevDimensions.height === dimensions.height) {
+							// no change
+							continue;
+						}
+						itemDimensions.set(index, dimensions);
+						if (dimensions) {
+							state.updateHeightAtIndex(index, dimensions.height);
+						}
+					}
+				});
+				resizeObserver.observe(node);
+				willUnmountFns.push(() => resizeObserver.disconnect());
+			}
 
 			// calculate item dimensions
 			const dimensions = calcItemDimensions(node);
@@ -128,25 +122,9 @@ export default function WindowedList({ state, children }: Props) {
 				willUnmountFns.push(() => {
 					scrollParentNode.removeEventListener('scroll', handleScroll, false);
 				});
-				scrollParentNode.addEventListener('resize', handleResize, false);
-				willUnmountFns.push(() => {
-					scrollParentNode.removeEventListener('resize', handleResize, false);
-				});
-				// const resizeNode: HTMLElement = scrollParentNode === window ? document.body : (scrollParentNode as HTMLElement);
-				// mutationObserver.observe(resizeNode, { attributes: true, childList: true, subtree: true });
 			}
 		},
-		[
-			calcItemDimensions,
-			handleResize,
-			handleScroll,
-			itemDimensions,
-			itemRefs,
-			itemRenderFns,
-			scrollParentRef,
-			state,
-			willUnmountFns
-		]
+		[calcItemDimensions, handleScroll, itemDimensions, itemResizeObservers, scrollParentRef, state, willUnmountFns]
 	);
 
 	const shouldItemRender = React.useCallback(
@@ -173,30 +151,12 @@ export interface ItemProps extends ChildrenProps {
 }
 
 export const WindowedListItem = ({ children, index, onItemRender, shouldItemRender, getItemDimensions }: ItemProps) => {
-	const [_forceUpdate, _setForceUpdate] = React.useState(false);
-	const forceUpdateCallbackRef = React.useMemo<{ current: (() => void) | null }>(() => ({ current: null }), []);
-	const forceUpdate = React.useCallback(
-		(callback: () => void) => {
-			forceUpdateCallbackRef.current = callback;
-			_setForceUpdate(!_forceUpdate);
-		},
-		[_forceUpdate, forceUpdateCallbackRef]
-	);
 	const ref = React.useMemo<{ current: null | HTMLElement }>(() => ({ current: null }), []);
 	React.useLayoutEffect(
 		() => {
-			onItemRender(index, ref.current, forceUpdate);
-			if (forceUpdateCallbackRef.current) {
-				let callback = forceUpdateCallbackRef.current;
-				forceUpdateCallbackRef.current = null;
-				callback();
-			}
+			onItemRender(index, ref.current);
 		},
-		[forceUpdate, forceUpdateCallbackRef, getItemDimensions, index, onItemRender, ref]
+		[getItemDimensions, index, onItemRender, ref]
 	);
-	// if (!shouldItemRender(index)) {
-	// 	ref.current = null;
-	// 	return null;
-	// }
 	return <>{children(ref)}</>;
 };

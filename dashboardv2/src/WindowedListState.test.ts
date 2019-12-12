@@ -26,6 +26,33 @@ it('responds to a change in scroll position', () => {
 	expect(state.visibleLength).toEqual(4);
 });
 
+it('responds to small incremental changes in scroll position', () => {
+	const state = new State();
+	state.length = 1000;
+	state.viewportHeight = 400;
+	state.defaultHeight = 100;
+
+	state.updateScrollPosition(30);
+	expect(state.visibleIndexTop).toEqual(0);
+	expect(state.visibleLength).toEqual(4);
+
+	state.updateScrollPosition(60);
+	expect(state.visibleIndexTop).toEqual(0);
+	expect(state.visibleLength).toEqual(4);
+
+	state.updateScrollPosition(90);
+	expect(state.visibleIndexTop).toEqual(0);
+	expect(state.visibleLength).toEqual(4);
+
+	state.updateScrollPosition(110);
+	expect(state.visibleIndexTop).toEqual(1);
+	expect(state.visibleLength).toEqual(4);
+
+	state.updateScrollPosition(99);
+	expect(state.visibleIndexTop).toEqual(0);
+	expect(state.visibleLength).toEqual(4);
+});
+
 it('sets padding for top and bottom equal to height of items out of range', () => {
 	const state = new State();
 	state.length = 1000;
