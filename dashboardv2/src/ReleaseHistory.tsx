@@ -77,9 +77,9 @@ function mapHistory<T>({
 	renderDate
 }: MapHistoryProps<T>): Array<T | null> {
 	const res = [] as Array<T | null>;
-	const len = items.length;
+	const len = Math.min(startIndex + length, items.length);
 	let date: Date | null = null;
-	for (let i = 0; i < len; i++) {
+	for (let i = startIndex; i < len; i++) {
 		const item = items[i];
 		let prevDate = date;
 		let el: T | null = null;
@@ -453,19 +453,45 @@ function ReleaseHistory({ appName }: Props) {
 		setNextScale(null);
 	};
 
+	const paddingTopRef = React.useRef<HTMLElement>();
+	const paddingBottomRef = React.useRef<HTMLElement>();
+
+	const [startIndex, setStartIndex] = React.useState(0);
+	const [length, setLength] = React.useState(0);
 	const windowedListState = React.useMemo(() => new WindowedListState(), []);
-	// windowedListState.onChange(() => {
-	// // force update
-	// });
+	React.useEffect(
+		() => {
+			return windowedListState.onChange((state: WindowedListState) => {
+				// console.log('windowedListState.onChange', state);
+				const paddingTopNode = paddingTopRef.current;
+				if (paddingTopNode) {
+					paddingTopNode.style.height = state.paddingTop + 'px';
+				}
+				const paddingBottomNode = paddingBottomRef.current;
+				if (paddingBottomNode) {
+					paddingBottomNode.style.height = state.paddingBottom + 'px';
+				}
+
+				setStartIndex(state.visibleIndexTop);
+				setLength(state.visibleLength);
+			});
+		},
+		[windowedListState]
+	);
+
+	React.useLayoutEffect(
+		() => {
+			windowedListState.viewportHeight = 400; // TODO(jvatic): actually calculate this and update on resize
+			windowedListState.length = items.length;
+			windowedListState.defaultHeight = 150;
+			windowedListState.calculateVisibleIndices();
+		},
+		[items.length, windowedListState]
+	);
 
 	if (releaseHistoryLoading || currentScaleLoading || appLoading) {
 		return <Loading />;
 	}
-
-	// TODO(jvatic): move this logic somewhere more appropriate
-	windowedListState.viewportHeight = 200; // TODO(jvatic): actually calculate this and update on resize
-	windowedListState.length = items.length;
-	windowedListState.calculateVisibleIndices();
 
 	return (
 		<>
@@ -496,12 +522,23 @@ function ReleaseHistory({ appName }: Props) {
 			) : null}
 
 			<form onSubmit={submitHandler}>
-				<Box tag="ul" style={{ position: 'relative' }}>
+				<Box
+					tag="ul"
+					flex={false}
+					overflow={{ vertical: 'scroll', horizontal: 'auto' }}
+					style={{
+						position: 'relative',
+						height: 400
+					}}
+				>
+					<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex="grow">
+						&nbsp;
+					</Box>
 					<WindowedList state={windowedListState}>
 						{(windowedListItemProps) => {
 							return mapHistory({
-								startIndex: windowedListState.visibleIndexTop,
-								length: windowedListState.visibleLength,
+								startIndex,
+								length,
 								items,
 								renderDate: (key, date) => <ReleaseHistoryDateHeader key={key} date={date} tag="li" margin="xsmall" />,
 								renderRelease: (key, [r, p], index) => (
@@ -510,6 +547,7 @@ function ReleaseHistory({ appName }: Props) {
 											<ReleaseHistoryRelease
 												ref={ref}
 												tag="li"
+												flex="grow"
 												margin={{ bottom: 'small' }}
 												release={r}
 												prevRelease={p}
@@ -534,6 +572,7 @@ function ReleaseHistory({ appName }: Props) {
 											<ReleaseHistoryScale
 												ref={ref}
 												tag="li"
+												flex="grow"
 												margin={{ bottom: 'small' }}
 												scaleRequest={s}
 												selected={selectedItemName === s.getName()}
@@ -554,6 +593,9 @@ function ReleaseHistory({ appName }: Props) {
 							});
 						}}
 					</WindowedList>
+					<Box tag="li" ref={paddingBottomRef as any} style={{ height: windowedListState.paddingBottom }} flex="grow">
+						&nbsp;
+					</Box>
 				</Box>
 
 				<StickyBox bottom="0px" background="background" pad="xsmall" width="medium">

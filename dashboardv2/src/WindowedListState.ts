@@ -1,3 +1,8 @@
+import { debounce } from 'lodash';
+
+export type CallbackFunction = (state: WindowedListState) => void;
+export type UnsubscribeFunction = () => void;
+
 export default class WindowedListState {
 	public viewportHeight: number; // viewport height in px
 	public length: number; // size of list
@@ -10,6 +15,8 @@ export default class WindowedListState {
 
 	private scrollTop: number; // current scroll offset
 	private heights: Map<number, number>; // index => height
+	private subscribers: Set<CallbackFunction>;
+	private handleChange: () => void;
 
 	constructor() {
 		this.viewportHeight = 0;
@@ -23,6 +30,15 @@ export default class WindowedListState {
 
 		this.scrollTop = 0;
 		this.heights = new Map<number, number>();
+		this.subscribers = new Set<CallbackFunction>();
+		this.handleChange = debounce(this._handleChange, 0, { maxWait: 30 });
+	}
+
+	public onChange(cb: CallbackFunction): UnsubscribeFunction {
+		this.subscribers.add(cb);
+		return () => {
+			this.subscribers.delete(cb);
+		};
 	}
 
 	public calculateVisibleIndices(): void {
@@ -62,9 +78,12 @@ export default class WindowedListState {
 			paddingBottom = paddingBottom + this.getItemHeight(i);
 		}
 		this.paddingBottom = paddingBottom;
+
+		this.handleChange();
 	}
 
 	// sets scrollTop and re-calculates vidibleIndexTop/visibleLength and padding
+	// TODO(jvatic): There's a bug here somewhere
 	public updateScrollPosition(scrollTop: number): void {
 		const prevScrollTop = this.scrollTop;
 		const prevVisibleIndexTop = this.visibleIndexTop;
@@ -137,6 +156,8 @@ export default class WindowedListState {
 			const heightDelta = this.getItemRangeHeight(prevVisibleIndexBottom + 1, visibleIndexBottom);
 			this.paddingBottom = this.paddingBottom - heightDelta;
 		}
+
+		this.handleChange();
 	}
 
 	// sets item height and re-calculates vidibleIndexTop/visibleLength and padding
@@ -191,6 +212,8 @@ export default class WindowedListState {
 			// less items are in the viewport
 			this.paddingBottom = this.paddingBottom + this.getItemRangeHeight(visibleIndexBottom + 1, prevVisibleIndexBottom);
 		}
+
+		this.handleChange();
 	}
 
 	private getItemHeight(index: number): number {
@@ -207,6 +230,12 @@ export default class WindowedListState {
 			sum = sum + this.getItemHeight(i);
 		}
 		return sum;
+	}
+
+	private _handleChange() {
+		this.subscribers.forEach((cb: CallbackFunction) => {
+			cb(this);
+		});
 	}
 }
 

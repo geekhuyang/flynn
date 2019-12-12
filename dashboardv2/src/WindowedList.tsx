@@ -7,7 +7,7 @@ import WindowedListState from './WindowedListState';
 
 function findScrollParent(node: HTMLElement | null): HTMLElement | Window {
 	while (node) {
-		switch (window.getComputedStyle(node).overflow) {
+		switch (window.getComputedStyle(node).overflowY) {
 			case 'auto':
 				return node;
 			case 'scroll':
@@ -39,6 +39,8 @@ interface ItemDimensions {
 
 export default function WindowedList({ state, children }: Props) {
 	const itemDimensions = React.useMemo(() => new Map<number, ItemDimensions | null>(), []);
+	const itemRefs = React.useMemo(() => new Map<number, HTMLElement>(), []);
+	const itemRenderFns = React.useMemo(() => new Map<number, ForceUpdateFunction>(), []);
 	const scrollParentRef = React.useMemo<{ current: HTMLElement | Window | null }>(() => ({ current: null }), []);
 
 	const willUnmountFns = React.useMemo<Array<() => void>>(() => [], []);
@@ -79,7 +81,17 @@ export default function WindowedList({ state, children }: Props) {
 
 	const handleScroll = React.useCallback(
 		() => {
-			state.updateScrollPosition(getScrollTop());
+			// const prevVisibleIndexTop = state.visibleIndexTop;
+			// const prevVisibleLength = state.visibleLength;
+
+			const scrollTop = getScrollTop();
+			state.updateScrollPosition(scrollTop);
+			state.calculateVisibleIndices(); // workaround bug with updateScrollPosition
+
+// 			const visibleIndexTop = state.visibleIndexTop;
+// 			const visibleLength = state.visibleLength;
+
+// 			console.log({ scrollTop, prevVisibleIndexTop, visibleIndexTop, prevVisibleLength, visibleLength });
 		},
 		[getScrollTop, state]
 	);
@@ -93,6 +105,14 @@ export default function WindowedList({ state, children }: Props) {
 			if (!node) {
 				return;
 			}
+
+			// keep track of node for each index so that we can recalculate item
+			// heights when the viewport changes size.
+			itemRefs.set(index, node);
+
+			// store render fns for each index so that we can take items in and out
+			// of the DOM as they become visible/invisible.
+			itemRenderFns.set(index, forceUpdate);
 
 			// calculate item dimensions
 			const dimensions = calcItemDimensions(node);
@@ -116,21 +136,25 @@ export default function WindowedList({ state, children }: Props) {
 				// mutationObserver.observe(resizeNode, { attributes: true, childList: true, subtree: true });
 			}
 		},
-		[calcItemDimensions, handleResize, handleScroll, itemDimensions, scrollParentRef, state, willUnmountFns]
+		[
+			calcItemDimensions,
+			handleResize,
+			handleScroll,
+			itemDimensions,
+			itemRefs,
+			itemRenderFns,
+			scrollParentRef,
+			state,
+			willUnmountFns
+		]
 	);
 
 	const shouldItemRender = React.useCallback(
 		(index: number): boolean => {
-			console.log('shouldItemRender', {
-				index,
-				visibleIndexTop: state.visibleIndexTop,
-				visibleLength: state.visibleLength
-			});
-
 			// item should render if it's in the visible index range
-			return state.visibleIndexTop >= index && state.visibleIndexTop + state.visibleLength < index;
+			return state.visibleIndexTop <= index && state.visibleIndexTop + state.visibleLength > index;
 		},
-		[state.visibleIndexTop, state.visibleLength]
+		[state] // eslint-disable-line react-hooks/exhaustive-deps
 	);
 
 	const getItemDimensions = React.useCallback(
@@ -170,14 +194,9 @@ export const WindowedListItem = ({ children, index, onItemRender, shouldItemRend
 		},
 		[forceUpdate, forceUpdateCallbackRef, getItemDimensions, index, onItemRender, ref]
 	);
-	if (!shouldItemRender(index)) {
-		const dimensions = getItemDimensions(index);
-		const height = dimensions ? dimensions.height : 0;
-		return (
-			<li ref={ref as any} style={{ position: 'relative', height: `${height}px` }}>
-				&nbsp;
-			</li>
-		);
-	}
+	// if (!shouldItemRender(index)) {
+	// 	ref.current = null;
+	// 	return null;
+	// }
 	return <>{children(ref)}</>;
 };
