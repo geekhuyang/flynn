@@ -243,8 +243,5 @@ export default class WindowedListState {
 	}
 }
 
-// TODO: re-write WindowedList to use WindowedListState
-// TODO: add subscribe method to watch for changes in visibleIndexTop and visibleLength
 // TODO: handle changes in length property (maybe add an updateLength method so it's more explicit that a side effect is expected)
-// TODO: implement threshold
 // TODO: implement sticky items (items that are always rendered): the essensial difference is that they don't contribute to paddingTop and the one closest to visibleIndexTop (and above it) should always be rendered.

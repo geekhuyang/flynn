@@ -480,12 +480,15 @@ function ReleaseHistory({ appName }: Props) {
 
 	const scrollParentRef = React.useRef<HTMLElement>();
 
+	const windowingThresholdTop = 600;
+	const windowingThresholdBottom = 600;
+
 	React.useLayoutEffect(
 		() => {
 			const scrollParentNode = scrollParentRef.current;
 			if (scrollParentNode) {
 				const rect = scrollParentNode.getBoundingClientRect();
-				windowedListState.viewportHeight = rect.height;
+				windowedListState.viewportHeight = rect.height + windowingThresholdTop + windowingThresholdBottom;
 			}
 			windowedListState.length = items.length;
 			windowedListState.defaultHeight = 150;
@@ -540,7 +543,7 @@ function ReleaseHistory({ appName }: Props) {
 					<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex="grow">
 						&nbsp;
 					</Box>
-					<WindowedList state={windowedListState}>
+					<WindowedList state={windowedListState} thresholdTop={windowingThresholdTop}>
 						{(windowedListItemProps) => {
 							return mapHistory({
 								startIndex,

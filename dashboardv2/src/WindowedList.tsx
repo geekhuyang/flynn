@@ -24,6 +24,7 @@ export interface ChildrenProps {
 
 export interface Props {
 	state: WindowedListState;
+	thresholdTop: number; // number of pixels to keep rendered beyond the top of viewport
 	children: (props: ChildrenProps) => React.ReactNode;
 }
 
@@ -32,7 +33,7 @@ interface ItemDimensions {
 	height: number;
 }
 
-export default function WindowedList({ state, children }: Props) {
+export default function WindowedList({ state, thresholdTop, children }: Props) {
 	const itemDimensions = React.useMemo(() => new Map<number, ItemDimensions | null>(), []);
 	const itemResizeObservers = React.useMemo(() => new Map<number, ResizeObserver>(), []);
 	const scrollParentRef = React.useMemo<{ current: HTMLElement | Window | null }>(() => ({ current: null }), []);
@@ -75,10 +76,10 @@ export default function WindowedList({ state, children }: Props) {
 
 	const handleScroll = React.useCallback(
 		() => {
-			const scrollTop = getScrollTop();
+			const scrollTop = Math.max(0, getScrollTop() - thresholdTop);
 			state.updateScrollPosition(scrollTop);
 		},
-		[getScrollTop, state]
+		[getScrollTop, state, thresholdTop]
 	);
 
 	const onItemRender = React.useCallback(
