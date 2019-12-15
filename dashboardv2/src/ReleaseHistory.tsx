@@ -479,23 +479,32 @@ function ReleaseHistory({ appName }: Props) {
 		[windowedListState]
 	);
 
-	const scrollParentRef = React.useRef<HTMLElement>();
+	const releaseHistoryScrollContainerRef = React.useRef<HTMLElement>();
 
+	const minPaneHeight = 400;
+	const [paneHeight, setPaneHeight] = React.useState(400);
 	const windowingThresholdTop = 600;
 	const windowingThresholdBottom = 600;
-
 	React.useLayoutEffect(
 		() => {
-			const scrollParentNode = scrollParentRef.current;
-			if (scrollParentNode) {
-				const rect = scrollParentNode.getBoundingClientRect();
+			const releaseHistoryScrollContainerNode = releaseHistoryScrollContainerRef.current;
+			if (releaseHistoryScrollContainerNode) {
+				const rect = releaseHistoryScrollContainerNode.getBoundingClientRect();
 				windowedListState.viewportHeight = rect.height + windowingThresholdTop + windowingThresholdBottom;
+
+				// adjust Release History pane height to fill available space
+				// NOTE: 42 is the height of the pane header
+				// TODO(jvatic): respond to window resizing
+				const adjustedHeight = Math.max(minPaneHeight, document.documentElement.clientHeight - 142);
+				if (paneHeight !== adjustedHeight) {
+					setPaneHeight(adjustedHeight);
+				}
 			}
 			windowedListState.length = items.length;
 			windowedListState.defaultHeight = 150;
 			windowedListState.calculateVisibleIndices();
 		},
-		[items.length, windowedListState]
+		[items.length, paneHeight, windowedListState]
 	);
 
 	if (releaseHistoryLoading || currentScaleLoading || appLoading) {
@@ -532,13 +541,13 @@ function ReleaseHistory({ appName }: Props) {
 
 			<form onSubmit={submitHandler}>
 				<Box
-					ref={scrollParentRef as any}
+					ref={releaseHistoryScrollContainerRef as any}
 					tag="ul"
 					flex={false}
 					overflow={{ vertical: 'scroll', horizontal: 'auto' }}
 					style={{
 						position: 'relative',
-						height: 400
+						height: paneHeight
 					}}
 				>
 					<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex="grow">
