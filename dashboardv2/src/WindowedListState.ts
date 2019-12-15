@@ -34,7 +34,7 @@ export default class WindowedListState {
 		this.scrollTop = 0;
 		this.heights = new Map<number, number>();
 		this.subscribers = new Set<CallbackFunction>();
-		this.handleChange = debounce(this._handleChange, 0, { maxWait: 30 });
+		this.handleChange = debounce(this._handleChange, 0, { maxWait: 60 });
 		this.visibleIndicesCalculated = false;
 	}
 
