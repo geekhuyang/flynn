@@ -4,6 +4,8 @@ export type CallbackFunction = (state: WindowedListState) => void;
 export type UnsubscribeFunction = () => void;
 
 export default class WindowedListState {
+	// TODO(jvatic): handle changes in length property (maybe add an updateLength method so it's more explicit that a side effect is expected)
+
 	public viewportHeight: number; // viewport height in px
 	public length: number; // size of list
 	public defaultHeight: number; // estimated height of list item if we don't have the actual height
@@ -16,8 +18,8 @@ export default class WindowedListState {
 	private scrollTop: number; // current scroll offset
 	private heights: Map<number, number>; // index => height
 	private subscribers: Set<CallbackFunction>;
-	private handleChange: () => void;
-	private visibleIndicesCalculated: boolean;
+	private handleChange: () => void; // debounced version of _handleChange
+	private visibleIndicesCalculated: boolean; // flag for if calculateVisibleIndices has been run
 
 	constructor() {
 		this.viewportHeight = 0;
@@ -242,6 +244,3 @@ export default class WindowedListState {
 		});
 	}
 }
-
-// TODO: handle changes in length property (maybe add an updateLength method so it's more explicit that a side effect is expected)
-// TODO: implement sticky items (items that are always rendered): the essensial difference is that they don't contribute to paddingTop and the one closest to visibleIndexTop (and above it) should always be rendered.

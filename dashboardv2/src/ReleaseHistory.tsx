@@ -97,8 +97,7 @@ function mapHistory<T>({
 		}
 
 		if (prevDate === null || date < prevDate) {
-			// TODO(jvatic): this should render as a WindowedList sticky item:
-			// res.push(renderDate(date.toDateString(), date));
+			res.push(renderDate(date.toDateString(), date));
 		}
 
 		res.push(el);
@@ -150,9 +149,11 @@ interface ReleaseHistoryDateHeaderProps extends BoxProps {
 }
 
 function ReleaseHistoryDateHeader({ date, ...boxProps }: ReleaseHistoryDateHeaderProps) {
+	// NOTE: We need to unset min-height for the <Box /> below as it is otherwise
+	// set to 0 which causes the content to overflow the box.
 	return (
 		<StickyBox top="-1px" {...boxProps}>
-			<Box round background="background" alignSelf="center" pad="small">
+			<Box round background="background" alignSelf="center" pad="small" style={{ minHeight: 'unset' }}>
 				{isToday(date) ? 'Today' : date.toDateString()}
 			</Box>
 		</StickyBox>
