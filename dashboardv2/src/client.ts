@@ -43,8 +43,8 @@ export interface Client {
 	) => CancelFunc;
 	streamReleaseHistory: (
 		cb: ReleaseHistoryCallback,
-		scaleReqModifiers: RequestModifier<StreamScalesRequest>[],
-		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[]
+		scaleReqModifiers: RequestModifier<StreamScalesRequest>[] | null, // when null, scale requests are omitted
+		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[] | null // when null, deployments are omitted
 	) => CancelFunc;
 
 	// write API
@@ -669,24 +669,25 @@ class _Client implements Client {
 
 	public streamReleaseHistory(
 		cb: ReleaseHistoryCallback,
-		scaleReqModifiers: RequestModifier<StreamScalesRequest>[],
-		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[]
+		scaleReqModifiers: RequestModifier<StreamScalesRequest>[] | null,
+		deploymentReqModifiers: RequestModifier<StreamDeploymentsRequest>[] | null
 	): CancelFunc {
 		let streamScalesRes: StreamScalesResponse;
 		let streamDeploymentsRes: StreamDeploymentsResponse;
 
-		const cancelStreamScales = this.streamScales((res: StreamScalesResponse, error: ErrorWithCode | null) => {
-			streamScalesRes = res;
-			cb(new StreamReleaseHistoryResponse(streamScalesRes, streamDeploymentsRes), error);
-		}, ...scaleReqModifiers);
+		const cancelStreamScales = scaleReqModifiers
+			? this.streamScales((res: StreamScalesResponse, error: ErrorWithCode | null) => {
+					streamScalesRes = res;
+					cb(new StreamReleaseHistoryResponse(streamScalesRes, streamDeploymentsRes), error);
+			  }, ...scaleReqModifiers)
+			: () => {};
 
-		const cancelStreamDeployments = this.streamDeployments(
-			(res: StreamDeploymentsResponse, error: ErrorWithCode | null) => {
-				streamDeploymentsRes = res;
-				cb(new StreamReleaseHistoryResponse(streamScalesRes, res), error);
-			},
-			...deploymentReqModifiers
-		);
+		const cancelStreamDeployments = deploymentReqModifiers
+			? this.streamDeployments((res: StreamDeploymentsResponse, error: ErrorWithCode | null) => {
+					streamDeploymentsRes = res;
+					cb(new StreamReleaseHistoryResponse(streamScalesRes, res), error);
+			  }, ...deploymentReqModifiers)
+			: () => {};
 
 		return () => {
 			cancelStreamScales();

@@ -351,13 +351,13 @@ function ReleaseHistory({ appName }: Props) {
 		},
 		[appName, isCodeReleaseEnabled, isConfigReleaseEnabled]
 	);
-	const { items, loading: releaseHistoryLoading, error: releaseHistoryError } = useReleaseHistory(
-		appName,
-		[],
-		deploymentReqModifiers,
-		isScaleEnabled,
-		streamDeploymentsEnabled
-	);
+	const {
+		items,
+		nextPageToken,
+		fetchNextPage,
+		loading: releaseHistoryLoading,
+		error: releaseHistoryError
+	} = useReleaseHistory(appName, [], deploymentReqModifiers, isScaleEnabled, streamDeploymentsEnabled);
 	React.useEffect(
 		() => {
 			if (releaseHistoryError) {
@@ -477,6 +477,17 @@ function ReleaseHistory({ appName }: Props) {
 			});
 		},
 		[windowedListState]
+	);
+
+	// pagination
+	React.useEffect(
+		() => {
+			if (nextPageToken && startIndex + length >= items.length) {
+				return fetchNextPage(nextPageToken);
+			}
+			return () => {};
+		},
+		[fetchNextPage, items.length, length, nextPageToken, startIndex]
 	);
 
 	const releaseHistoryScrollContainerRef = React.useRef<HTMLElement>();
