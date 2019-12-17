@@ -2,10 +2,47 @@
 // file: controller.proto
 
 import * as jspb from "google-protobuf";
-import * as google_api_annotations_pb from "./google/api/annotations_pb";
 import * as google_protobuf_timestamp_pb from "google-protobuf/google/protobuf/timestamp_pb";
 import * as google_protobuf_duration_pb from "google-protobuf/google/protobuf/duration_pb";
 import * as google_protobuf_field_mask_pb from "google-protobuf/google/protobuf/field_mask_pb";
+import * as google_protobuf_empty_pb from "google-protobuf/google/protobuf/empty_pb";
+
+export class StatusResponse extends jspb.Message {
+  getStatus(): StatusResponse.CodeMap[keyof StatusResponse.CodeMap];
+  setStatus(value: StatusResponse.CodeMap[keyof StatusResponse.CodeMap]): void;
+
+  getDetail(): Uint8Array | string;
+  getDetail_asU8(): Uint8Array;
+  getDetail_asB64(): string;
+  setDetail(value: Uint8Array | string): void;
+
+  getVersion(): string;
+  setVersion(value: string): void;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): StatusResponse.AsObject;
+  static toObject(includeInstance: boolean, msg: StatusResponse): StatusResponse.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: StatusResponse, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): StatusResponse;
+  static deserializeBinaryFromReader(message: StatusResponse, reader: jspb.BinaryReader): StatusResponse;
+}
+
+export namespace StatusResponse {
+  export type AsObject = {
+    status: StatusResponse.CodeMap[keyof StatusResponse.CodeMap],
+    detail: Uint8Array | string,
+    version: string,
+  }
+
+  export interface CodeMap {
+    HEALTHY: 0;
+    UNHEALTHY: 1;
+  }
+
+  export const Code: CodeMap;
+}
 
 export class LabelFilter extends jspb.Message {
   clearExpressionsList(): void;
@@ -307,11 +344,6 @@ export class StreamDeploymentsRequest extends jspb.Message {
   setTypeFiltersList(value: Array<ReleaseTypeMap[keyof ReleaseTypeMap]>): void;
   addTypeFilters(value: ReleaseTypeMap[keyof ReleaseTypeMap], index?: number): ReleaseTypeMap[keyof ReleaseTypeMap];
 
-  clearLabelFiltersList(): void;
-  getLabelFiltersList(): Array<LabelFilter>;
-  setLabelFiltersList(value: Array<LabelFilter>): void;
-  addLabelFilters(value?: LabelFilter, index?: number): LabelFilter;
-
   clearStatusFiltersList(): void;
   getStatusFiltersList(): Array<DeploymentStatusMap[keyof DeploymentStatusMap]>;
   setStatusFiltersList(value: Array<DeploymentStatusMap[keyof DeploymentStatusMap]>): void;
@@ -339,7 +371,6 @@ export namespace StreamDeploymentsRequest {
     pageToken: string,
     nameFiltersList: Array<string>,
     typeFiltersList: Array<ReleaseTypeMap[keyof ReleaseTypeMap]>,
-    labelFiltersList: Array<LabelFilter.AsObject>,
     statusFiltersList: Array<DeploymentStatusMap[keyof DeploymentStatusMap]>,
     streamUpdates: boolean,
     streamCreates: boolean,
@@ -714,8 +745,8 @@ export class HostMount extends jspb.Message {
   getTarget(): string;
   setTarget(value: string): void;
 
-  getWritable(): boolean;
-  setWritable(value: boolean): void;
+  getWriteable(): boolean;
+  setWriteable(value: boolean): void;
 
   getDevice(): string;
   setDevice(value: string): void;
@@ -740,7 +771,7 @@ export namespace HostMount {
   export type AsObject = {
     location: string,
     target: string,
-    writable: boolean,
+    writeable: boolean,
     device: string,
     data: string,
     flags: number,

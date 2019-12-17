@@ -2,6 +2,7 @@
 // file: controller.proto
 
 var controller_pb = require("./controller_pb");
+var google_protobuf_empty_pb = require("google-protobuf/google/protobuf/empty_pb");
 var grpc = require("@improbable-eng/grpc-web").grpc;
 
 var Controller = (function () {
@@ -9,6 +10,15 @@ var Controller = (function () {
   Controller.serviceName = "controller.Controller";
   return Controller;
 }());
+
+Controller.Status = {
+  methodName: "Status",
+  service: Controller,
+  requestStream: false,
+  responseStream: false,
+  requestType: google_protobuf_empty_pb.Empty,
+  responseType: controller_pb.StatusResponse
+};
 
 Controller.StreamApps = {
   methodName: "StreamApps",
@@ -88,6 +98,37 @@ function ControllerClient(serviceHost, options) {
   this.serviceHost = serviceHost;
   this.options = options || {};
 }
+
+ControllerClient.prototype.status = function status(requestMessage, metadata, callback) {
+  if (arguments.length === 2) {
+    callback = arguments[1];
+  }
+  var client = grpc.unary(Controller.Status, {
+    request: requestMessage,
+    host: this.serviceHost,
+    metadata: metadata,
+    transport: this.options.transport,
+    debug: this.options.debug,
+    onEnd: function (response) {
+      if (callback) {
+        if (response.status !== grpc.Code.OK) {
+          var err = new Error(response.statusMessage);
+          err.code = response.status;
+          err.metadata = response.trailers;
+          callback(err, null);
+        } else {
+          callback(null, response.message);
+        }
+      }
+    }
+  });
+  return {
+    cancel: function () {
+      callback = null;
+      client.close();
+    }
+  };
+};
 
 ControllerClient.prototype.streamApps = function streamApps(requestMessage, metadata) {
   var listeners = {

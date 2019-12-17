@@ -2,7 +2,17 @@
 // file: controller.proto
 
 import * as controller_pb from "./controller_pb";
+import * as google_protobuf_empty_pb from "google-protobuf/google/protobuf/empty_pb";
 import {grpc} from "@improbable-eng/grpc-web";
+
+type ControllerStatus = {
+  readonly methodName: string;
+  readonly service: typeof Controller;
+  readonly requestStream: false;
+  readonly responseStream: false;
+  readonly requestType: typeof google_protobuf_empty_pb.Empty;
+  readonly responseType: typeof controller_pb.StatusResponse;
+};
 
 type ControllerStreamApps = {
   readonly methodName: string;
@@ -78,6 +88,7 @@ type ControllerCreateDeployment = {
 
 export class Controller {
   static readonly serviceName: string;
+  static readonly Status: ControllerStatus;
   static readonly StreamApps: ControllerStreamApps;
   static readonly StreamReleases: ControllerStreamReleases;
   static readonly StreamScales: ControllerStreamScales;
@@ -120,6 +131,15 @@ export class ControllerClient {
   readonly serviceHost: string;
 
   constructor(serviceHost: string, options?: grpc.RpcOptions);
+  status(
+    requestMessage: google_protobuf_empty_pb.Empty,
+    metadata: grpc.Metadata,
+    callback: (error: ServiceError|null, responseMessage: controller_pb.StatusResponse|null) => void
+  ): UnaryResponse;
+  status(
+    requestMessage: google_protobuf_empty_pb.Empty,
+    callback: (error: ServiceError|null, responseMessage: controller_pb.StatusResponse|null) => void
+  ): UnaryResponse;
   streamApps(requestMessage: controller_pb.StreamAppsRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamAppsResponse>;
   streamReleases(requestMessage: controller_pb.StreamReleasesRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamReleasesResponse>;
   streamScales(requestMessage: controller_pb.StreamScalesRequest, metadata?: grpc.Metadata): ResponseStream<controller_pb.StreamScalesResponse>;
