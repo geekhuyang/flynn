@@ -632,7 +632,7 @@
       "base": "dashboardv2-base",
       "layers": [{
         "gobuild": {
-          "vendor/github.com/jteeuwen/go-bindata/go-bindata": "/bin/go-bindata"
+          "vendor/github.com/go-bindata/go-bindata": "/bin/go-bindata"
         }
       }]
     },
