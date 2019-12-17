@@ -42,5 +42,4 @@ ln -nfs ${nodebin}/npm ${nodedir}/bin/npm
 npm install -g google-protobuf@3.11.2 ts-protoc-gen@0.12.0
 
 # install yarn
-curl -o- -L https://yarnpkg.com/install.sh | bash # TODO(jvatic): perform checksum
-ln -s /.yarn/bin/yarn /usr/local/bin/yarn
+npm install -g yarn@1.21.1
