@@ -39,7 +39,7 @@ ln -nfs ${nodebin}/node ${nodedir}/bin/node
 ln -nfs ${nodebin}/npm ${nodedir}/bin/npm
 
 # install typescript protoc (https://github.com/improbable-eng/ts-protoc-gen)
-npm install -g google-protobuf ts-protoc-gen
+npm install -g google-protobuf@3.11.2 ts-protoc-gen@0.12.0
 
 # install yarn
 curl -o- -L https://yarnpkg.com/install.sh | bash # TODO(jvatic): perform checksum
