@@ -60,7 +60,7 @@ export default function useReleaseHistory(
 				// scale request modifiers
 				[setNameFilters(appName), setStreamUpdates(), setStreamCreates(), ...scaleReqModifiers],
 				// deployment request modifiers
-				[setStreamUpdates(), setStreamCreates(), ...deploymentReqModifiers]
+				[setNameFilters(appName), setStreamUpdates(), setStreamCreates(), ...deploymentReqModifiers]
 			);
 			return cancel;
 		},
@@ -102,16 +102,11 @@ export default function useReleaseHistory(
 				},
 				// scale request modifiers
 				scaleRequestsNextPageToken
-					? [
-							setNameFilters(appName),
-							setStreamUpdates(),
-							setPageToken(scaleRequestsNextPageToken),
-							...scaleReqModifiers
-					  ]
+					? [setNameFilters(appName), setPageToken(scaleRequestsNextPageToken), ...scaleReqModifiers]
 					: null,
 				// deployment request modifiers
 				deploymentsNextPageToken
-					? [setStreamUpdates(), setPageToken(deploymentsNextPageToken), ...deploymentReqModifiers]
+					? [setNameFilters(appName), setPageToken(deploymentsNextPageToken), ...deploymentReqModifiers]
 					: null
 			);
 			return cancel;

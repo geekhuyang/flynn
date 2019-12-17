@@ -13,7 +13,7 @@ import useApp from './useApp';
 import useReleaseHistory from './useReleaseHistory';
 import useAppScale from './useAppScale';
 import useErrorHandler from './useErrorHandler';
-import { listDeploymentsRequestFilterType, setNameFilters, ReleaseHistoryItem } from './client';
+import { listDeploymentsRequestFilterType, ReleaseHistoryItem } from './client';
 import {
 	Release,
 	ReleaseType,
@@ -329,7 +329,7 @@ function ReleaseHistory({ appName }: Props) {
 		},
 		[rhf]
 	);
-	const isScaleEnabled = React.useMemo(
+	const scalesEnabled = React.useMemo(
 		() => {
 			return rhf.indexOf('scale') !== -1;
 		},
@@ -337,7 +337,7 @@ function ReleaseHistory({ appName }: Props) {
 	);
 
 	// Stream release history (scales and deployments coalesced together)
-	const streamDeploymentsEnabled = isCodeReleaseEnabled || isConfigReleaseEnabled;
+	const deploymentsEnabled = isCodeReleaseEnabled || isConfigReleaseEnabled;
 	const deploymentReqModifiers = React.useMemo(
 		() => {
 			let filterType = ReleaseType.ANY as ReleaseTypeMap[keyof ReleaseTypeMap];
@@ -347,17 +347,18 @@ function ReleaseHistory({ appName }: Props) {
 				filterType = ReleaseType.CONFIG;
 			}
 
-			return [setNameFilters(appName), listDeploymentsRequestFilterType(filterType)];
+			return [listDeploymentsRequestFilterType(filterType)];
 		},
-		[appName, isCodeReleaseEnabled, isConfigReleaseEnabled]
+		[isCodeReleaseEnabled, isConfigReleaseEnabled]
 	);
+	const scaleReqModifiers = React.useMemo(() => [], []);
 	const {
 		items,
 		nextPageToken,
 		fetchNextPage,
 		loading: releaseHistoryLoading,
 		error: releaseHistoryError
-	} = useReleaseHistory(appName, [], deploymentReqModifiers, isScaleEnabled, streamDeploymentsEnabled);
+	} = useReleaseHistory(appName, scaleReqModifiers, deploymentReqModifiers, scalesEnabled, deploymentsEnabled);
 	React.useEffect(
 		() => {
 			if (releaseHistoryError) {
