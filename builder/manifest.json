@@ -625,20 +625,14 @@
           "controller-grpc/protobuf/*.proto"
         ],
         "limits": { "temp_disk": "1G" }
-      }]
-    },
-    {
-      "id": "dashboardv2-builder",
-      "base": "dashboardv2-base",
-      "layers": [{
-        "gobuild": {
-          "vendor/github.com/go-bindata/go-bindata": "/bin/go-bindata"
-        }
+      },
+      {
+        "gobin": ["github.com/go-bindata/go-bindata/go-bindata"]
       }]
     },
     {
       "id": "dashboardv2-compiled",
-      "base": "dashboardv2-builder",
+      "base": "dashboardv2-base",
       "layers": [{
         "script": "dashboardv2/img/compile.sh",
         "inputs": [
