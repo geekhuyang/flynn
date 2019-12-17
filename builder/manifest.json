@@ -629,7 +629,7 @@
       "layers": [{
         "script": "builder/img/dashboardv2-base.sh",
         "inputs": [
-          "controller-grpc/protobuf/*.proto"
+          "controller/protobuf/*.proto"
         ],
         "limits": { "temp_disk": "1G" }
       },
@@ -640,32 +640,39 @@
     {
       "id": "dashboardv2-compiled",
       "base": "dashboardv2-base",
-      "layers": [{
-        "script": "dashboardv2/img/compile.sh",
-        "inputs": [
-          "dashboardv2/.eslintignore",
-          "dashboardv2/yarn.lock",
-          "dashboardv2/*.json",
-          "dashboardv2/*.ts",
-          "dashboardv2/config/*.js",
-          "dashboardv2/scripts/*.js",
-          "dashboardv2/public/*.png",
-          "dashboardv2/public/*.ico",
-          "dashboardv2/public/*.json",
-          "dashboardv2/public/*.html",
-          "dashboardv2/src/*.css",
-          "dashboardv2/src/*.ts",
-          "dashboardv2/src/*.tsx",
-          "dashboardv2/src/util/*.ts",
-          "dashboardv2/src/generated/*.ts",
-          "dashboardv2/src/generated/*.js",
-          "dashboardv2/src/generated/google/api/*.ts",
-          "dashboardv2/src/generated/google/api/*.js",
-          "dashboardv2/src/KeyValueEditor/*.ts",
-          "dashboardv2/src/KeyValueEditor/*.tsx"
-        ],
-        "limits": { "memory": "3G", "temp_disk": "3G" }
-      }]
+      "layers": [
+        {
+         "protobuildjs": {
+           "controller/protobuf": "dashboardv2/src/generated"
+          }
+        },
+        {
+         "script": "dashboardv2/img/compile.sh",
+         "inputs": [
+           "dashboardv2/.eslintignore",
+           "dashboardv2/yarn.lock",
+           "dashboardv2/*.json",
+           "dashboardv2/*.ts",
+           "dashboardv2/config/*.js",
+           "dashboardv2/scripts/*.js",
+           "dashboardv2/public/*.png",
+           "dashboardv2/public/*.ico",
+           "dashboardv2/public/*.json",
+           "dashboardv2/public/*.html",
+           "dashboardv2/src/*.css",
+           "dashboardv2/src/*.ts",
+           "dashboardv2/src/*.tsx",
+           "dashboardv2/src/util/*.ts",
+           "dashboardv2/src/generated/*.ts",
+           "dashboardv2/src/generated/*.js",
+           "dashboardv2/src/generated/google/api/*.ts",
+           "dashboardv2/src/generated/google/api/*.js",
+           "dashboardv2/src/KeyValueEditor/*.ts",
+           "dashboardv2/src/KeyValueEditor/*.tsx"
+         ],
+         "limits": { "memory": "3G", "temp_disk": "3G" }
+       }
+      ]
     },
     {
       "id": "dashboardv2",
