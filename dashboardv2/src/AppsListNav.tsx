@@ -5,6 +5,7 @@ import useRouter from './useRouter';
 import useAppsList from './useAppsList';
 import useErrorHandler from './useErrorHandler';
 
+import { App } from './generated/controller_pb';
 import { excludeAppsWithLabels } from './client';
 
 import Loading from './Loading';
@@ -97,18 +98,17 @@ export default function AppsListNav({ onNav }: Props) {
 		[fetchNextPage, apps.length, length, nextPageToken, startIndex]
 	);
 
-	const appRoutes = React.useMemo(
-		() =>
-			apps.slice(startIndex, startIndex + length).map((app, index) => {
-				const path = `/${app.getName()}`; // e.g. /apps/48a2d322-5cfe-4323-8823-4dad4528c090
-				return {
-					path,
-					search,
-					displayName: app.getDisplayName(), // e.g. controller
-					selected: location.pathname === path
-				};
-			}),
-		[apps, length, location.pathname, search, startIndex]
+	const appRoute = React.useCallback(
+		(app: App) => {
+			const path = `/${app.getName()}`; // e.g. /apps/48a2d322-5cfe-4323-8823-4dad4528c090
+			return {
+				path,
+				search,
+				displayName: app.getDisplayName(), // e.g. controller
+				selected: location.pathname === path
+			};
+		},
+		[location.pathname, search]
 	);
 
 	const navHandler = React.useCallback(
@@ -140,7 +140,9 @@ export default function AppsListNav({ onNav }: Props) {
 
 			<WindowedList state={windowedListState} thresholdTop={windowingThresholdTop}>
 				{(windowedListItemProps) => {
-					return appRoutes.map((r, index) => {
+					return apps.map((app, index) => {
+						if (index < startIndex) return null;
+						const r = appRoute(app);
 						return (
 							<WindowedListItem key={r.path} index={index} {...windowedListItemProps}>
 								{(ref) => (
