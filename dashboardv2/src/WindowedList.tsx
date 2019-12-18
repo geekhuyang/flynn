@@ -90,24 +90,26 @@ export default function WindowedList({ state, thresholdTop, children }: Props) {
 
 			// keep track of any changes in the node dimensions
 			if (!itemResizeObservers.get(index)) {
-				// TODO(jvatic): Figure out and fix why this causes scrolling to freeze
-				// const resizeObserver = new window.ResizeObserver((entries, observer) => {
-				// 	for (let entry of entries) {
-				// 		if (entry.target !== node) continue;
-				// 		const prevDimensions = itemDimensions.get(index);
-				// 		const dimensions = calcItemDimensions(node);
-				// 		if (prevDimensions && dimensions && prevDimensions.height === dimensions.height) {
-				// 			// no change
-				// 			continue;
-				// 		}
-				// 		itemDimensions.set(index, dimensions);
-				// 		if (dimensions) {
-				// 			state.updateHeightAtIndex(index, dimensions.height);
-				// 		}
-				// 	}
-				// });
-				// resizeObserver.observe(node);
-				// willUnmountFns.push(() => resizeObserver.disconnect());
+				const resizeObserver = new window.ResizeObserver((entries, observer) => {
+					for (let entry of entries) {
+						if (entry.target !== node) continue;
+						const prevDimensions = itemDimensions.get(index);
+						const dimensions = calcItemDimensions(node);
+						if (prevDimensions && dimensions && prevDimensions.height === dimensions.height) {
+							// no change
+							continue;
+						}
+						itemDimensions.set(index, dimensions);
+						if (dimensions) {
+							state.updateHeightAtIndex(index, dimensions.height);
+						}
+					}
+				});
+				itemResizeObservers.set(index, resizeObserver);
+				queueMicrotask(() => {
+					resizeObserver.observe(node);
+					willUnmountFns.push(() => resizeObserver.disconnect());
+				});
 			}
 
 			// calculate item dimensions
