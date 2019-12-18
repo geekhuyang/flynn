@@ -9,6 +9,8 @@ import { excludeAppsWithLabels } from './client';
 
 import Loading from './Loading';
 import NavAnchor from './NavAnchor';
+import WindowedListState from './WindowedListState';
+import WindowedList, { WindowedListItem } from './WindowedList';
 
 export interface Props {
 	onNav?: (path: string) => void;
@@ -23,7 +25,7 @@ export default function AppsListNav({ onNav }: Props) {
 		excludeSystemAppsFilter,
 		showSystemApps
 	]);
-	const { apps, loading: isLoading, error: appsError } = useAppsList(appsListFilters);
+	const { apps, nextPageToken, fetchNextPage, loading: isLoading, error: appsError } = useAppsList(appsListFilters);
 	React.useEffect(
 		() => {
 			if (appsError) {
@@ -42,48 +44,125 @@ export default function AppsListNav({ onNav }: Props) {
 	});
 	const search = '?' + persistedUrlParams.toString();
 
-	const appRoutes = apps.map((app, index) => {
-		const path = `/${app.getName()}`; // e.g. /apps/48a2d322-5cfe-4323-8823-4dad4528c090
-		return {
-			path,
-			search,
-			displayName: app.getDisplayName(), // e.g. controller
-			selected: location.pathname === path
-		};
-	});
+	const scrollContainerRef = React.useRef<HTMLElement>();
+	const paddingTopRef = React.useRef<HTMLElement>();
+	const paddingBottomRef = React.useRef<HTMLElement>();
+	const [startIndex, setStartIndex] = React.useState(0);
+	const [length, setLength] = React.useState(0);
+	const windowedListState = React.useMemo(() => new WindowedListState(), []);
+	const windowingThresholdTop = 600;
+	const windowingThresholdBottom = 600;
+	React.useEffect(
+		() => {
+			return windowedListState.onChange((state: WindowedListState) => {
+				const paddingTopNode = paddingTopRef.current;
+				if (paddingTopNode) {
+					paddingTopNode.style.height = state.paddingTop + 'px';
+				}
+				const paddingBottomNode = paddingBottomRef.current;
+				if (paddingBottomNode) {
+					paddingBottomNode.style.height = state.paddingBottom + 'px';
+				}
 
-	const navHandler = (path: string) => {
-		if (location.pathname === path) {
-			return;
-		}
-		if (onNav) {
-			onNav(path);
-		}
-	};
+				setStartIndex(state.visibleIndexTop);
+				setLength(state.visibleLength);
+			});
+		},
+		[windowedListState]
+	);
+
+	// initialize WindowedListState
+	React.useLayoutEffect(
+		() => {
+			const scrollContainerNode = scrollContainerRef.current;
+			if (scrollContainerNode) {
+				const rect = scrollContainerNode.getBoundingClientRect();
+				windowedListState.viewportHeight = rect.height + windowingThresholdTop + windowingThresholdBottom;
+			}
+			windowedListState.length = apps.length;
+			windowedListState.defaultHeight = 150;
+			windowedListState.calculateVisibleIndices();
+		},
+		[apps.length, windowedListState]
+	);
+
+	// pagination
+	React.useEffect(
+		() => {
+			if (nextPageToken && startIndex + length >= apps.length) {
+				return fetchNextPage(nextPageToken);
+			}
+			return () => {};
+		},
+		[fetchNextPage, apps.length, length, nextPageToken, startIndex]
+	);
+
+	const appRoutes = React.useMemo(
+		() =>
+			apps.slice(startIndex, startIndex + length).map((app, index) => {
+				const path = `/${app.getName()}`; // e.g. /apps/48a2d322-5cfe-4323-8823-4dad4528c090
+				return {
+					path,
+					search,
+					displayName: app.getDisplayName(), // e.g. controller
+					selected: location.pathname === path
+				};
+			}),
+		[apps, length, location.pathname, search, startIndex]
+	);
+
+	const navHandler = React.useCallback(
+		(path: string) => {
+			if (location.pathname === path) {
+				return;
+			}
+			if (onNav) {
+				onNav(path);
+			}
+		},
+		[location.pathname, onNav]
+	);
 
 	return (
 		<Box tag="ul" margin="none" pad="none" flex={true} overflow="auto">
 			{isLoading ? <Loading /> : null}
 
-			{appRoutes.map((r) => {
-				return (
-					<NavAnchor path={r.path} search={search} key={r.path} onNav={navHandler}>
-						<Box
-							tag="li"
-							direction="row"
-							justify="between"
-							align="center"
-							border="bottom"
-							pad={{ horizontal: 'medium', vertical: 'small' }}
-							basis="auto"
-							flex={false}
-							background={r.selected ? 'accent-1' : 'neutral-1'}
-						>
-							{r.displayName}
-						</Box>
-					</NavAnchor>
-				);
-			})}
+			<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex={false}>
+				&nbsp;
+			</Box>
+
+			<WindowedList state={windowedListState} thresholdTop={windowingThresholdTop}>
+				{(windowedListItemProps) => {
+					return appRoutes.map((r, index) => {
+						return (
+							<WindowedListItem key={r.path} index={index} {...windowedListItemProps}>
+								{(ref) => (
+									<NavAnchor path={r.path} search={search} onNav={navHandler}>
+										<Box
+											tag="li"
+											ref={ref as any}
+											direction="row"
+											justify="between"
+											align="center"
+											border="bottom"
+											pad={{ horizontal: 'medium', vertical: 'small' }}
+											basis="auto"
+											flex={false}
+											background={r.selected ? 'accent-1' : 'neutral-1'}
+										>
+											{r.displayName}
+										</Box>
+									</NavAnchor>
+								)}
+							</WindowedListItem>
+						);
+					});
+				}}
+			</WindowedList>
+
+			<Box tag="li" ref={paddingBottomRef as any} style={{ height: windowedListState.paddingBottom }} flex={false}>
+				&nbsp;
+			</Box>
 		</Box>
 	);
 }

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import useClient from './useClient';
 import { App, StreamAppsRequest, StreamAppsResponse } from './generated/controller_pb';
-import { RequestModifier, setStreamCreates, setStreamUpdates } from './client';
+import { RequestModifier, setStreamCreates, setStreamUpdates, setPageToken } from './client';
 
 const emptyReqModifiersArray = [] as RequestModifier<StreamAppsRequest>[];
 
@@ -10,6 +10,9 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 	const [appsLoading, setAppsLoading] = React.useState(true);
 	const [apps, setApps] = React.useState<App[]>([]);
 	const [error, setError] = React.useState<Error | null>(null);
+	const [nextPageToken, setNextPageToken] = React.useState('');
+	const pagesMap = React.useMemo(() => new Map<string, App[]>(), []);
+	const [pageOrder, setPageOrder] = React.useState<string[]>([]);
 	if (reqModifiers.length === 0) {
 		reqModifiers = emptyReqModifiersArray;
 	}
@@ -25,6 +28,7 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 						return;
 					}
 					setApps(res.getAppsList());
+					setNextPageToken(res.getNextPageToken());
 					setError(null);
 				},
 				setStreamCreates(),
@@ -35,9 +39,53 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 		},
 		[client, reqModifiers]
 	);
+
+	const fetchNextPage = React.useCallback(
+		(pageToken) => {
+			let cancel = () => {};
+
+			if (pageToken === '') return cancel;
+			if (pagesMap.has(pageToken)) return cancel;
+
+			// initialize page so additional calls with the same token will be void
+			// (see above).
+			pagesMap.set(pageToken, []);
+
+			cancel = client.streamApps(
+				(res: StreamAppsResponse, error: Error | null) => {
+					setAppsLoading(false);
+					if (error) {
+						setError(error);
+						return;
+					}
+					pagesMap.set(pageToken, res.getAppsList());
+					setNextPageToken(res.getNextPageToken());
+					setPageOrder(pageOrder.concat([pageToken]));
+				},
+				setPageToken(pageToken),
+				...reqModifiers
+			);
+			return cancel;
+		},
+		[client, pageOrder, pagesMap, reqModifiers]
+	);
+
+	const allApps = React.useMemo(
+		() => {
+			return apps.concat(
+				pageOrder.reduce((m: App[], pts: string) => {
+					return m.concat(pagesMap.get(pts) || []);
+				}, [])
+			);
+		},
+		[apps, pageOrder, pagesMap]
+	);
+
 	return {
 		loading: appsLoading,
-		apps,
+		apps: allApps,
+		nextPageToken,
+		fetchNextPage,
 		error
 	};
 }
