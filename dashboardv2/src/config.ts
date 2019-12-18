@@ -12,7 +12,7 @@ export interface Config extends PublicConfig, PrivateConfig {
 }
 
 const config: Config = {
-	CONTROLLER_HOST: process.env.CONTROLLER_HOST || 'https://controller-grpc.1.localflynn.com',
+	CONTROLLER_HOST: process.env.CONTROLLER_HOST || 'https://controller.1.localflynn.com',
 	CONTROLLER_AUTH_KEY: process.env.CONTROLLER_AUTH_KEY || null,
 
 	unsetPrivateConfig: () => {
