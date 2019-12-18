@@ -227,7 +227,11 @@ export default class WindowedListState {
 			// index is out of range
 			return 0;
 		}
-		return this.heights.get(index) || this.defaultHeight;
+		const height = this.heights.get(index);
+		if (height === undefined) {
+			return this.defaultHeight;
+		}
+		return height;
 	}
 
 	private getItemRangeHeight(startIndex: number, endIndex: number): number {

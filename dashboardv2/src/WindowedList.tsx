@@ -18,8 +18,6 @@ function findScrollParent(node: HTMLElement | null): HTMLElement | Window {
 
 export interface ChildrenProps {
 	onItemRender: (index: number, node: HTMLElement | null) => void;
-	shouldItemRender: (index: number) => boolean;
-	getItemDimensions: (index: number) => ItemDimensions | null;
 }
 
 export interface Props {
@@ -90,19 +88,16 @@ export default function WindowedList({ state, thresholdTop, children }: Props) {
 
 			// keep track of any changes in the node dimensions
 			if (!itemResizeObservers.get(index)) {
-				const resizeObserver = new window.ResizeObserver((entries, observer) => {
-					for (let entry of entries) {
-						if (entry.target !== node) continue;
-						const prevDimensions = itemDimensions.get(index);
-						const dimensions = calcItemDimensions(node);
-						if (prevDimensions && dimensions && prevDimensions.height === dimensions.height) {
-							// no change
-							continue;
-						}
-						itemDimensions.set(index, dimensions);
-						if (dimensions) {
-							state.updateHeightAtIndex(index, dimensions.height);
-						}
+				const resizeObserver = new window.ResizeObserver(() => {
+					const prevDimensions = itemDimensions.get(index);
+					const dimensions = calcItemDimensions(node);
+					if (prevDimensions && dimensions && prevDimensions.height === dimensions.height) {
+						// no change
+						return;
+					}
+					itemDimensions.set(index, dimensions);
+					if (dimensions) {
+						state.updateHeightAtIndex(index, dimensions.height);
 					}
 				});
 				itemResizeObservers.set(index, resizeObserver);
@@ -131,22 +126,7 @@ export default function WindowedList({ state, thresholdTop, children }: Props) {
 		[calcItemDimensions, handleScroll, itemDimensions, itemResizeObservers, scrollParentRef, state, willUnmountFns]
 	);
 
-	const shouldItemRender = React.useCallback(
-		(index: number): boolean => {
-			// item should render if it's in the visible index range
-			return state.visibleIndexTop <= index && state.visibleIndexTop + state.visibleLength > index;
-		},
-		[state] // eslint-disable-line react-hooks/exhaustive-deps
-	);
-
-	const getItemDimensions = React.useCallback(
-		(index: number): ItemDimensions | null => {
-			return itemDimensions.get(index) || null;
-		},
-		[itemDimensions]
-	);
-
-	return <>{children({ onItemRender, shouldItemRender, getItemDimensions })}</>;
+	return <>{children({ onItemRender })}</>;
 }
 
 export interface ItemProps extends ChildrenProps {
@@ -154,13 +134,13 @@ export interface ItemProps extends ChildrenProps {
 	children: (ref: React.MutableRefObject<HTMLElement | null>) => React.ReactNode;
 }
 
-export const WindowedListItem = ({ children, index, onItemRender, shouldItemRender, getItemDimensions }: ItemProps) => {
+export const WindowedListItem = ({ children, index, onItemRender }: ItemProps) => {
 	const ref = React.useMemo<{ current: null | HTMLElement }>(() => ({ current: null }), []);
 	React.useLayoutEffect(
 		() => {
 			onItemRender(index, ref.current);
 		},
-		[getItemDimensions, index, onItemRender, ref]
+		[index, onItemRender, ref]
 	);
 	return <>{children(ref)}</>;
 };
