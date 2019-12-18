@@ -493,7 +493,7 @@ class _Client implements Client {
 		const streamKey = reqModifiers.map((m) => m.key).join(':');
 		const [stream, lastResponse] = memoizedStream('streamApps', streamKey, {
 			init: () => {
-				const req = new StreamReleasesRequest();
+				const req = new StreamAppsRequest();
 				reqModifiers.forEach((m) => m(req));
 				return this._cc.streamApps(req, this.metadata());
 			},
