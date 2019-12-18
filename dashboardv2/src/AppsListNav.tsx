@@ -80,7 +80,7 @@ export default function AppsListNav({ onNav }: Props) {
 				windowedListState.viewportHeight = rect.height + windowingThresholdTop + windowingThresholdBottom;
 			}
 			windowedListState.length = apps.length;
-			windowedListState.defaultHeight = 150;
+			windowedListState.defaultHeight = 50;
 			windowedListState.calculateVisibleIndices();
 		},
 		[apps.length, windowedListState]
@@ -124,7 +124,14 @@ export default function AppsListNav({ onNav }: Props) {
 	);
 
 	return (
-		<Box tag="ul" margin="none" pad="none" flex={true} overflow="auto">
+		<Box
+			ref={scrollContainerRef as any}
+			tag="ul"
+			margin="none"
+			pad="none"
+			flex={true}
+			overflow={{ vertical: 'auto', horizontal: 'auto' }}
+		>
 			{isLoading ? <Loading /> : null}
 
 			<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex={false}>
