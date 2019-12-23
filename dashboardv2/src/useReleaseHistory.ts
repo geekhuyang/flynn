@@ -6,6 +6,7 @@ import {
 	setStreamUpdates,
 	setStreamCreates,
 	setPageToken,
+	setPageSize,
 	StreamReleaseHistoryResponse,
 	ReleaseHistoryItem
 } from './client';
@@ -49,6 +50,10 @@ export default function useReleaseHistory(
 						setError(error);
 						return;
 					}
+
+					// wait for both streams to have a response
+					if (!res.isComplete()) return;
+
 					setItems(res.getItemsList());
 					setNextPageToken({
 						scales: res.getScaleRequestsNextPageToken(),
@@ -58,9 +63,9 @@ export default function useReleaseHistory(
 					setError(null);
 				},
 				// scale request modifiers
-				[setNameFilters(appName), setStreamUpdates(), setStreamCreates(), ...scaleReqModifiers],
+				[setNameFilters(appName), setPageSize(50), setStreamUpdates(), setStreamCreates(), ...scaleReqModifiers],
 				// deployment request modifiers
-				[setNameFilters(appName), setStreamUpdates(), setStreamCreates(), ...deploymentReqModifiers]
+				[setNameFilters(appName), setPageSize(50), setStreamUpdates(), setStreamCreates(), ...deploymentReqModifiers]
 			);
 			return cancel;
 		},
@@ -90,6 +95,9 @@ export default function useReleaseHistory(
 						setError(error);
 						return;
 					}
+
+					// wait for both streams to have a response
+					if (!res.isComplete()) return;
 
 					setNextPageToken({
 						scales: res.getScaleRequestsNextPageToken(),

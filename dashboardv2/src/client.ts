@@ -117,6 +117,10 @@ export class StreamReleaseHistoryResponse {
 		this._itemsBuilt = false;
 	}
 
+	public isComplete(): boolean {
+		return !!(this._scalesRes && this._deploymentsRes);
+	}
+
 	public getItemsList(): ReleaseHistoryItem[] {
 		if (!this._itemsBuilt) {
 			this._buildItems();
@@ -391,7 +395,7 @@ function memoizedStream<T>(
 		dataCallbacks.forEach((cb) => cb(data));
 	});
 	let cancel = stream.cancel;
-	stream.on('end', () => {
+	stream.on('end', (status?: Status) => {
 		cleanup(true);
 		cancel = () => {};
 	});
@@ -407,7 +411,7 @@ function memoizedStream<T>(
 					dataCallbacks.push(handler as ((message: T) => void));
 					break;
 				case 'end':
-					stream.on('end', handler as (() => void));
+					stream.on('end', handler as ((status?: Status) => void));
 					break;
 				case 'status':
 					stream.on('status', handler as ((status: Status) => void));
@@ -418,7 +422,7 @@ function memoizedStream<T>(
 		},
 		cancel: stream.cancel
 	};
-	__memoizedStreams[key] = stream;
+	__memoizedStreams[key] = s;
 	return [s, undefined];
 }
 

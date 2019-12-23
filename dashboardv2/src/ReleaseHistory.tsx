@@ -492,14 +492,20 @@ function ReleaseHistory({ appName }: Props) {
 	);
 
 	const releaseHistoryScrollContainerRef = React.useRef<HTMLElement>();
+	const [releaseHistoryScrollContainerNode, setReleaseHistoryScrollContainerNode] = React.useState<HTMLElement | null>(
+		null
+	);
+	React.useEffect(() => {
+		// this is called after every render
+		setReleaseHistoryScrollContainerNode(releaseHistoryScrollContainerRef.current || null);
+	}, undefined); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const minPaneHeight = 400;
 	const [paneHeight, setPaneHeight] = React.useState(400);
 	const windowingThresholdTop = 600;
 	const windowingThresholdBottom = 600;
-	React.useLayoutEffect(
+	React.useEffect(
 		() => {
-			const releaseHistoryScrollContainerNode = releaseHistoryScrollContainerRef.current;
 			if (releaseHistoryScrollContainerNode) {
 				const rect = releaseHistoryScrollContainerNode.getBoundingClientRect();
 				windowedListState.viewportHeight = rect.height + windowingThresholdTop + windowingThresholdBottom;
@@ -516,7 +522,7 @@ function ReleaseHistory({ appName }: Props) {
 			windowedListState.defaultHeight = 150;
 			windowedListState.calculateVisibleIndices();
 		},
-		[items.length, paneHeight, windowedListState]
+		[items.length, paneHeight, releaseHistoryScrollContainerNode, windowedListState]
 	);
 
 	if (releaseHistoryLoading || currentScaleLoading || appLoading) {

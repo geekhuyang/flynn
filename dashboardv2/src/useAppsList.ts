@@ -1,7 +1,7 @@
 import * as React from 'react';
 import useClient from './useClient';
 import { App, StreamAppsRequest, StreamAppsResponse } from './generated/controller_pb';
-import { RequestModifier, setStreamCreates, setStreamUpdates, setPageToken } from './client';
+import { RequestModifier, setStreamCreates, setStreamUpdates, setPageToken, setPageSize } from './client';
 
 const emptyReqModifiersArray = [] as RequestModifier<StreamAppsRequest>[];
 
@@ -31,6 +31,7 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 					setNextPageToken(res.getNextPageToken());
 					setError(null);
 				},
+				setPageSize(10),
 				setStreamCreates(),
 				setStreamUpdates(),
 				...reqModifiers
