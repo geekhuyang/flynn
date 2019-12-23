@@ -31,7 +31,7 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 					setNextPageToken(res.getNextPageToken());
 					setError(null);
 				},
-				setPageSize(10),
+				setPageSize(50),
 				setStreamCreates(),
 				setStreamUpdates(),
 				...reqModifiers
