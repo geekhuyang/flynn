@@ -565,7 +565,9 @@ function ReleaseHistory({ appName }: Props) {
 					overflow={{ vertical: 'scroll', horizontal: 'auto' }}
 					style={{
 						position: 'relative',
-						height: paneHeight
+						height: paneHeight,
+						padding: 0,
+						margin: 0
 					}}
 				>
 					<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex="grow">
