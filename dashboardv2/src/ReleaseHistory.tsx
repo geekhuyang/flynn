@@ -564,6 +564,7 @@ function ReleaseHistory({ appName }: Props) {
 					ref={releaseHistoryScrollContainerRef as any}
 					tag="ul"
 					flex={false}
+					alignContent="start"
 					overflow={{ vertical: 'scroll', horizontal: 'auto' }}
 					style={{
 						position: 'relative',
@@ -572,7 +573,7 @@ function ReleaseHistory({ appName }: Props) {
 						margin: 0
 					}}
 				>
-					<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex="grow">
+					<Box tag="li" ref={paddingTopRef as any} style={{ height: windowedListState.paddingTop }} flex={false}>
 						&nbsp;
 					</Box>
 					<WindowedList state={windowedListState} thresholdTop={windowingThresholdTop}>
@@ -588,7 +589,7 @@ function ReleaseHistory({ appName }: Props) {
 											<ReleaseHistoryRelease
 												ref={ref}
 												tag="li"
-												flex="grow"
+												flex={false}
 												margin={{ bottom: 'small' }}
 												release={r}
 												prevRelease={p}
@@ -613,7 +614,7 @@ function ReleaseHistory({ appName }: Props) {
 											<ReleaseHistoryScale
 												ref={ref}
 												tag="li"
-												flex="grow"
+												flex={false}
 												margin={{ bottom: 'small' }}
 												scaleRequest={s}
 												selected={selectedItemName === s.getName()}
@@ -634,7 +635,7 @@ function ReleaseHistory({ appName }: Props) {
 							});
 						}}
 					</WindowedList>
-					<Box tag="li" ref={paddingBottomRef as any} style={{ height: windowedListState.paddingBottom }} flex="grow">
+					<Box tag="li" ref={paddingBottomRef as any} style={{ height: windowedListState.paddingBottom }} flex={false}>
 						&nbsp;
 					</Box>
 				</Box>
