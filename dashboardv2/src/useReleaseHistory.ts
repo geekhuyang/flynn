@@ -15,9 +15,18 @@ import { StreamScalesRequest, StreamDeploymentsRequest } from './generated/contr
 const emptyScaleReqModifiersArray = [] as RequestModifier<StreamScalesRequest>[];
 const emptyDeploymentReqModifiersArray = [] as RequestModifier<StreamDeploymentsRequest>[];
 
-interface NextPageTokens {
-	scales: string;
-	deployments: string;
+class NextPageTokens {
+	public scales: string;
+	public deployments: string;
+
+	constructor(scales: string, deployments: string) {
+		this.scales = scales;
+		this.deployments = deployments;
+	}
+
+	toString() {
+		return this.scales + this.deployments;
+	}
 }
 
 export default function useReleaseHistory(
@@ -32,6 +41,7 @@ export default function useReleaseHistory(
 	const [items, setItems] = React.useState<ReleaseHistoryItem[]>([]);
 	const [error, setError] = React.useState<Error | null>(null);
 	const [nextPageToken, setNextPageToken] = React.useState<NextPageTokens | null>(null);
+	const [nextPageLoading, setNextPageLoading] = React.useState<boolean>(false);
 	if (scaleReqModifiers.length === 0) {
 		scaleReqModifiers = emptyScaleReqModifiersArray;
 	}
@@ -55,10 +65,7 @@ export default function useReleaseHistory(
 					if (!res.isComplete()) return;
 
 					setItems(res.getItemsList());
-					setNextPageToken({
-						scales: res.getScaleRequestsNextPageToken(),
-						deployments: res.getDeploymentsNextPageToken()
-					});
+					setNextPageToken(new NextPageTokens(res.getScaleRequestsNextPageToken(), res.getDeploymentsNextPageToken()));
 					setLoading(false);
 					setError(null);
 				},
@@ -89,24 +96,26 @@ export default function useReleaseHistory(
 			const scaleRequestsNextPageToken = pageTokens.scales;
 			const deploymentsNextPageToken = pageTokens.deployments;
 
+			setNextPageLoading(true);
+
 			cancel = client.streamReleaseHistory(
 				(res: StreamReleaseHistoryResponse, error: Error | null) => {
 					if (error) {
 						setError(error);
+						setNextPageLoading(false);
 						return;
 					}
 
 					// wait for both streams to have a response
 					if (!res.isComplete()) return;
 
-					setNextPageToken({
-						scales: res.getScaleRequestsNextPageToken(),
-						deployments: res.getDeploymentsNextPageToken()
-					});
+					setNextPageToken(new NextPageTokens(res.getScaleRequestsNextPageToken(), res.getDeploymentsNextPageToken()));
 
 					pagesMap.set(pageTokens, res.getItemsList());
 					const nextPageOrder = pageOrder.concat([pageTokens]);
 					setPageOrder(nextPageOrder);
+
+					setNextPageLoading(false);
 				},
 				// scale request modifiers
 				scaleRequestsNextPageToken
@@ -137,6 +146,7 @@ export default function useReleaseHistory(
 		loading,
 		items: allItems,
 		nextPageToken,
+		nextPageLoading,
 		fetchNextPage,
 		error
 	};

@@ -13,6 +13,7 @@ import useApp from './useApp';
 import useReleaseHistory from './useReleaseHistory';
 import useAppScale from './useAppScale';
 import useErrorHandler from './useErrorHandler';
+import useWithCancel from './useWithCancel';
 import { listDeploymentsRequestFilterType, ReleaseHistoryItem } from './client';
 import {
 	Release,
@@ -481,14 +482,15 @@ function ReleaseHistory({ appName }: Props) {
 	);
 
 	// pagination
+	const withCancel = useWithCancel();
 	React.useEffect(
 		() => {
-			if (nextPageToken && startIndex + length >= items.length) {
-				return fetchNextPage(nextPageToken);
+			if (nextPageToken && startIndex + length >= items.length - 10) {
+				withCancel.set(nextPageToken.toString(), fetchNextPage(nextPageToken));
 			}
 			return () => {};
 		},
-		[fetchNextPage, items.length, length, nextPageToken, startIndex]
+		[fetchNextPage, items.length, length, nextPageToken, withCancel, startIndex]
 	);
 
 	const releaseHistoryScrollContainerRef = React.useRef<HTMLElement>();

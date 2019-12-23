@@ -680,17 +680,29 @@ class _Client implements Client {
 		let streamDeploymentsRes: StreamDeploymentsResponse;
 
 		const cancelStreamScales = scaleReqModifiers
-			? this.streamScales((res: StreamScalesResponse, error: ErrorWithCode | null) => {
-					streamScalesRes = res;
-					cb(new StreamReleaseHistoryResponse(streamScalesRes, streamDeploymentsRes), error);
-			  }, ...scaleReqModifiers)
+			? ((reqModifiers: RequestModifier<StreamScalesRequest>[]) => {
+					const req = new StreamScalesRequest();
+					reqModifiers.forEach((m) => m(req));
+					const stream = this._cc.streamScales(req, this.metadata());
+					stream.on('data', (res: StreamScalesResponse) => {
+						streamScalesRes = res;
+						cb(new StreamReleaseHistoryResponse(streamScalesRes, streamDeploymentsRes), null);
+					});
+					return stream.cancel;
+			  })(scaleReqModifiers)
 			: () => {};
 
 		const cancelStreamDeployments = deploymentReqModifiers
-			? this.streamDeployments((res: StreamDeploymentsResponse, error: ErrorWithCode | null) => {
-					streamDeploymentsRes = res;
-					cb(new StreamReleaseHistoryResponse(streamScalesRes, res), error);
-			  }, ...deploymentReqModifiers)
+			? ((reqModifiers: RequestModifier<StreamDeploymentsRequest>[]) => {
+					const req = new StreamDeploymentsRequest();
+					reqModifiers.forEach((m) => m(req));
+					const stream = this._cc.streamDeployments(req, this.metadata());
+					stream.on('data', (res: StreamDeploymentsResponse) => {
+						streamDeploymentsRes = res;
+						cb(new StreamReleaseHistoryResponse(streamScalesRes, res), null);
+					});
+					return stream.cancel;
+			  })(deploymentReqModifiers)
 			: () => {};
 
 		return () => {
@@ -776,6 +788,6 @@ class _Client implements Client {
 	}
 }
 
-const cc = new ControllerClient(Config.CONTROLLER_HOST, {});
+const cc = new ControllerClient(Config.CONTROLLER_HOST, { debug: false });
 
 export default new _Client(cc);
