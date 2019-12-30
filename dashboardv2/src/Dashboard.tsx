@@ -126,7 +126,9 @@ export default function Dashboard() {
 	return (
 		<Grommet full theme={modifiedAruba} cssVars>
 			<Router>
-				<DashboardInner />
+				<React.StrictMode>
+					<DashboardInner />
+				</React.StrictMode>
 			</Router>
 		</Grommet>
 	);
