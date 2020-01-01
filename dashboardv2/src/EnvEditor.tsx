@@ -136,13 +136,13 @@ export default function EnvEditor(props: Props) {
 		[handleError, release, releaseError]
 	);
 
-	const handleDeployDismiss = () => {
+	const handleDeployDismiss = React.useCallback(() => {
 		dispatch({ type: ActionType.DEPLOY_DISMISS });
-	};
+	}, []);
 
-	const handleDeployComplete = () => {
+	const handleDeployComplete = React.useCallback(() => {
 		dispatch({ type: ActionType.DEPLOY_SUCCESS });
-	};
+	}, []);
 
 	if (releaseIsLoading) {
 		return <Loading />;
