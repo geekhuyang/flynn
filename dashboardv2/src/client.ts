@@ -156,6 +156,20 @@ export class StreamReleaseHistoryResponse {
 		return '';
 	}
 
+	public receiveStreamScalesResponse(res: StreamScalesResponse): StreamReleaseHistoryResponse {
+		if (this._scalesRes) {
+			res = mergeStreamScalesResponses(this._scalesRes, res);
+		}
+		return new StreamReleaseHistoryResponse(res, this._deploymentsRes);
+	}
+
+	public receiveStreamDeploymentsResponse(res: StreamDeploymentsResponse): StreamReleaseHistoryResponse {
+		if (this._deploymentsRes) {
+			res = mergeStreamDeploymentResponses(this._deploymentsRes, res);
+		}
+		return new StreamReleaseHistoryResponse(this._scalesRes, res);
+	}
+
 	private _buildItems(): void {
 		const items = [] as ReleaseHistoryItem[];
 		const deployments = this.getDeploymentsList();
@@ -426,6 +440,57 @@ function memoizedStream<T>(
 	return [s, undefined];
 }
 
+function mergeStreamScalesResponses(
+	prev: StreamScalesResponse | null,
+	res: StreamScalesResponse
+): StreamScalesResponse {
+	const scaleIndices = new Map<string, number>();
+	const scales = [] as ScaleRequest[];
+	(prev ? prev.getScaleRequestsList() : []).forEach((scale, index) => {
+		scaleIndices.set(scale.getName(), index);
+		scales.push(scale);
+	});
+	res.getScaleRequestsList().forEach((scale) => {
+		const index = scaleIndices.get(scale.getName());
+		if (index !== undefined) {
+			scales[index] = scale;
+		} else {
+			scales.push(scale);
+		}
+	});
+	scales.sort((a, b) => {
+		return compareTimestamps(b.getCreateTime(), a.getCreateTime());
+	});
+	res.setScaleRequestsList(scales);
+	return res;
+}
+
+function mergeStreamDeploymentResponses(
+	prev: StreamDeploymentsResponse | null,
+	res: StreamDeploymentsResponse
+): StreamDeploymentsResponse {
+	const deploymentIndices = new Map<string, number>();
+	const deployments = [] as ExpandedDeployment[];
+	(prev ? prev.getDeploymentsList() : []).forEach((deployment, index) => {
+		deploymentIndices.set(deployment.getName(), index);
+		deployments.push(deployment);
+	});
+	res.getDeploymentsList().forEach((deployment) => {
+		const index = deploymentIndices.get(deployment.getName());
+		if (index !== undefined) {
+			deployments[index] = deployment;
+		} else {
+			deployments.push(deployment);
+		}
+	});
+	res.setDeploymentsList(
+		deployments.sort((a, b) => {
+			return compareTimestamps(b.getCreateTime(), a.getCreateTime());
+		})
+	);
+	return res;
+}
+
 class _Client implements Client {
 	private _cc: ControllerClient;
 	constructor(cc: ControllerClient) {
@@ -588,27 +653,7 @@ class _Client implements Client {
 				reqModifiers.forEach((m) => m(req));
 				return this._cc.streamScales(req, this.metadata());
 			},
-			mergeResponses: (prev: StreamScalesResponse | null, res: StreamScalesResponse): StreamScalesResponse => {
-				const scaleIndices = new Map<string, number>();
-				const scales = [] as ScaleRequest[];
-				(prev ? prev.getScaleRequestsList() : []).forEach((scale, index) => {
-					scaleIndices.set(scale.getName(), index);
-					scales.push(scale);
-				});
-				res.getScaleRequestsList().forEach((scale) => {
-					const index = scaleIndices.get(scale.getName());
-					if (index !== undefined) {
-						scales[index] = scale;
-					} else {
-						scales.push(scale);
-					}
-				});
-				scales.sort((a, b) => {
-					return compareTimestamps(b.getCreateTime(), a.getCreateTime());
-				});
-				res.setScaleRequestsList(scales);
-				return res;
-			}
+			mergeResponses: mergeStreamScalesResponses
 		});
 		stream.on('data', (response: StreamScalesResponse) => {
 			cb(response, null);
@@ -633,31 +678,7 @@ class _Client implements Client {
 				reqModifiers.forEach((m) => m(req));
 				return this._cc.streamDeployments(req, this.metadata());
 			},
-			mergeResponses: (
-				prev: StreamDeploymentsResponse | null,
-				res: StreamDeploymentsResponse
-			): StreamDeploymentsResponse => {
-				const deploymentIndices = new Map<string, number>();
-				const deployments = [] as ExpandedDeployment[];
-				(prev ? prev.getDeploymentsList() : []).forEach((deployment, index) => {
-					deploymentIndices.set(deployment.getName(), index);
-					deployments.push(deployment);
-				});
-				res.getDeploymentsList().forEach((deployment) => {
-					const index = deploymentIndices.get(deployment.getName());
-					if (index !== undefined) {
-						deployments[index] = deployment;
-					} else {
-						deployments.push(deployment);
-					}
-				});
-				res.setDeploymentsList(
-					deployments.sort((a, b) => {
-						return compareTimestamps(b.getCreateTime(), a.getCreateTime());
-					})
-				);
-				return res;
-			}
+			mergeResponses: mergeStreamDeploymentResponses
 		});
 		stream.on('data', (response: StreamDeploymentsResponse) => {
 			cb(response, null);
@@ -678,6 +699,7 @@ class _Client implements Client {
 	): CancelFunc {
 		let streamScalesRes: StreamScalesResponse;
 		let streamDeploymentsRes: StreamDeploymentsResponse;
+		let streamReleaseHistoryRes: StreamReleaseHistoryResponse | null = null;
 
 		const cancelStreamScales = scaleReqModifiers
 			? ((reqModifiers: RequestModifier<StreamScalesRequest>[]) => {
@@ -686,7 +708,12 @@ class _Client implements Client {
 					const stream = this._cc.streamScales(req, this.metadata());
 					stream.on('data', (res: StreamScalesResponse) => {
 						streamScalesRes = res;
-						cb(new StreamReleaseHistoryResponse(streamScalesRes, streamDeploymentsRes), null);
+						if (streamReleaseHistoryRes) {
+							streamReleaseHistoryRes = streamReleaseHistoryRes.receiveStreamScalesResponse(res);
+						} else {
+							streamReleaseHistoryRes = new StreamReleaseHistoryResponse(res, streamDeploymentsRes);
+						}
+						cb(streamReleaseHistoryRes, null);
 					});
 					return stream.cancel;
 			  })(scaleReqModifiers)
@@ -699,7 +726,12 @@ class _Client implements Client {
 					const stream = this._cc.streamDeployments(req, this.metadata());
 					stream.on('data', (res: StreamDeploymentsResponse) => {
 						streamDeploymentsRes = res;
-						cb(new StreamReleaseHistoryResponse(streamScalesRes, res), null);
+						if (streamReleaseHistoryRes) {
+							streamReleaseHistoryRes = streamReleaseHistoryRes.receiveStreamDeploymentsResponse(res);
+						} else {
+							streamReleaseHistoryRes = new StreamReleaseHistoryResponse(streamScalesRes, res);
+						}
+						cb(streamReleaseHistoryRes, null);
 					});
 					return stream.cancel;
 			  })(deploymentReqModifiers)
