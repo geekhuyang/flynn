@@ -9,13 +9,21 @@ import ifDev from './ifDev';
 import ProcessScale from './ProcessScale';
 import RightOverlay from './RightOverlay';
 import { default as useRouter } from './useRouter';
-import useApp from './useApp';
-import useReleaseHistory from './useReleaseHistory';
-import useAppScale from './useAppScale';
+import { useAppWithDispatch, Action as AppAction, ActionType as AppActionType } from './useApp';
+import {
+	useReleaseHistoryWithDispatch,
+	Action as ReleaseHistoryAction,
+	ActionType as ReleaseHistoryActionType,
+	reducer as releaseHistoryReducer,
+	State as ReleaseHistoryState,
+	initialState as initialReleaseHistoryState
+} from './useReleaseHistory';
+import { useAppScaleWithDispatch, Action as AppScaleAction, ActionType as AppScaleActionType } from './useAppScale';
 import useErrorHandler from './useErrorHandler';
 import useWithCancel from './useWithCancel';
 import { listDeploymentsRequestFilterType, ReleaseHistoryItem } from './client';
 import {
+	App,
 	Release,
 	ReleaseType,
 	ReleaseTypeMap,
@@ -31,6 +39,210 @@ import WindowedListState from './WindowedListState';
 import WindowedList, { WindowedListItem } from './WindowedList';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
+
+enum SelectedResourceType {
+	Release = 1,
+	ScaleRequest
+}
+
+enum ActionType {
+	SET_DEPLOY_STATUS = 'SET_DEPLOY_STATUS',
+	SET_SELECTED_ITEM = 'SET_SELECTED_ITEM',
+	SET_NEXT_SCALE = 'SET_NEXT_SCALE',
+	SET_NEXT_RELEASE_NAME = 'SET_NEXT_RELEASE_NAME',
+	SET_WINDOW = 'SET_WINDOW',
+	SET_PANE_HEIGHT = 'SET_PANE_HEIGHT',
+	SET_SELECTED_SCALE_REQUEST_DIFF = 'SET_SELECTED_SCALE_REQUEST_DIFF'
+}
+
+interface SetDeployStatusAction {
+	type: ActionType.SET_DEPLOY_STATUS;
+	isDeploying: boolean;
+}
+
+interface SetSelectedItemAction {
+	type: ActionType.SET_SELECTED_ITEM;
+	name: string;
+	resourceType?: SelectedResourceType;
+}
+
+interface SetNextScaleAction {
+	type: ActionType.SET_NEXT_SCALE;
+	scale: CreateScaleRequest | null;
+}
+
+interface SetNextReleaseNameAction {
+	type: ActionType.SET_NEXT_RELEASE_NAME;
+	name: string;
+}
+
+interface SetWindowAction {
+	type: ActionType.SET_WINDOW;
+	startIndex: number;
+	length: number;
+}
+
+interface SetPaneHeightAction {
+	type: ActionType.SET_PANE_HEIGHT;
+	height: number;
+}
+
+interface SetSelectedScaleRequestDiffAction {
+	type: ActionType.SET_SELECTED_SCALE_REQUEST_DIFF;
+	diff: Diff<string, number>;
+}
+
+type Action =
+	| SetDeployStatusAction
+	| SetSelectedItemAction
+	| SetNextScaleAction
+	| SetNextReleaseNameAction
+	| SetWindowAction
+	| SetPaneHeightAction
+	| SetSelectedScaleRequestDiffAction
+	| AppAction
+	| AppScaleAction
+	| ReleaseHistoryAction;
+
+interface State {
+	isDeploying: boolean;
+	selectedItemName: string;
+	selectedResourceType: SelectedResourceType;
+	nextScale: CreateScaleRequest | null;
+	nextReleaseName: string;
+	startIndex: number;
+	length: number;
+	paneHeight: number;
+	selectedScaleRequestDiff: Diff<string, number>;
+
+	// useApp
+	app: App | null;
+	appLoading: boolean;
+	appError: Error | null;
+
+	// useAppScale
+	currentScale: ScaleRequest | null;
+	currentScaleLoading: boolean;
+	currentScaleError: Error | null;
+
+	// useReleaseHistory
+	releaseHistoryState: ReleaseHistoryState;
+}
+
+type Reducer = (prevState: State, actions: Action | Action[]) => State;
+
+const emptyScaleRequestDiff: Diff<string, number> = [];
+function initialState(): State {
+	return {
+		isDeploying: false,
+		selectedItemName: '',
+		selectedResourceType: SelectedResourceType.Release,
+		nextScale: null,
+		nextReleaseName: '',
+		startIndex: 0,
+		length: 0,
+		paneHeight: 400,
+		selectedScaleRequestDiff: emptyScaleRequestDiff,
+
+		// useApp
+		app: null,
+		appLoading: true,
+		appError: null,
+
+		// useAppScale
+		currentScale: null,
+		currentScaleLoading: true,
+		currentScaleError: null,
+
+		// useReleaseHistory
+		releaseHistoryState: initialReleaseHistoryState()
+	};
+}
+
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
+	}
+	return actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case ActionType.SET_DEPLOY_STATUS:
+				nextState.isDeploying = action.isDeploying;
+				return nextState;
+
+			case ActionType.SET_SELECTED_ITEM:
+				nextState.selectedItemName = action.name;
+				if (action.resourceType) {
+					nextState.selectedResourceType = action.resourceType;
+				}
+				return nextState;
+
+			case ActionType.SET_NEXT_SCALE:
+				nextState.nextScale = action.scale;
+				return nextState;
+
+			case ActionType.SET_NEXT_RELEASE_NAME:
+				nextState.nextReleaseName = action.name;
+				return nextState;
+
+			case ActionType.SET_WINDOW:
+				if (prevState.startIndex === action.startIndex && prevState.length === action.length) {
+					return prevState;
+				}
+				nextState.startIndex = action.startIndex;
+				nextState.length = action.length;
+				return nextState;
+
+			case ActionType.SET_PANE_HEIGHT:
+				nextState.paneHeight = action.height;
+				return nextState;
+
+			case ActionType.SET_SELECTED_SCALE_REQUEST_DIFF:
+				nextState.selectedScaleRequestDiff = action.diff;
+				return nextState;
+
+			// useApp START
+			case AppActionType.SET_APP:
+				if (action.app) {
+					nextState.app = action.app;
+					return nextState;
+				}
+				return prevState;
+
+			case AppActionType.SET_LOADING:
+				nextState.appLoading = action.loading;
+				return nextState;
+
+			case AppActionType.SET_ERROR:
+				nextState.appError = action.error;
+				return nextState;
+			// useApp END
+
+			// useAppScale START
+			case AppScaleActionType.SET_SCALE:
+				nextState.currentScale = action.scale;
+				return nextState;
+
+			case AppScaleActionType.SET_ERROR:
+				nextState.currentScaleError = action.error;
+				return nextState;
+
+			case AppScaleActionType.SET_LOADING:
+				nextState.currentScaleLoading = action.loading;
+				return nextState;
+			// useAppScale END
+
+			default:
+				// useReleaseHistory
+				if (Object.values(ReleaseHistoryActionType).includes(action.type)) {
+					nextState.releaseHistoryState = releaseHistoryReducer(prevState.releaseHistoryState, action);
+					return nextState;
+				}
+
+				return prevState;
+		}
+	}, prevState);
+}
 
 interface MapHistoryProps<T> {
 	startIndex: number;
@@ -284,16 +496,44 @@ export interface Props {
 	appName: string;
 }
 
-enum SelectedResourceType {
-	Release = 1,
-	ScaleRequest
-}
-
 function ReleaseHistory({ appName }: Props) {
 	const handleError = useErrorHandler();
-	const [isDeploying, setIsDeploying] = React.useState(false);
 
-	const { app, loading: appLoading, error: appError } = useApp(appName);
+	const [
+		{
+			isDeploying,
+			selectedItemName,
+			selectedResourceType,
+			nextScale,
+			nextReleaseName,
+			startIndex,
+			length,
+			paneHeight,
+			selectedScaleRequestDiff,
+
+			// useApp
+			app,
+			appLoading,
+			appError,
+
+			// useAppScale
+			currentScale,
+			currentScaleLoading,
+			currentScaleError,
+
+			// useReleaseHistory
+			releaseHistoryState: {
+				allItems: items,
+				nextPageToken,
+				fetchNextPage,
+				loading: releaseHistoryLoading,
+				error: releaseHistoryError
+			}
+		},
+		dispatch
+	] = React.useReducer<Reducer>(reducer, initialState());
+
+	useAppWithDispatch(appName, dispatch);
 	React.useEffect(
 		() => {
 			if (appError) {
@@ -303,13 +543,23 @@ function ReleaseHistory({ appName }: Props) {
 		[appError, handleError]
 	);
 
+	// Get current formation
+	useAppScaleWithDispatch(appName, dispatch);
+	React.useEffect(
+		() => {
+			if (currentScaleError) {
+				handleError(currentScaleError);
+			}
+		},
+		[currentScaleError, handleError]
+	);
+
 	const currentReleaseName = app ? app.getRelease() : '';
 
-	const [selectedItemName, setSelectedItemName] = React.useState<string>('');
 	React.useEffect(
 		() => {
 			if (!currentReleaseName) return;
-			setSelectedItemName(currentReleaseName);
+			dispatch({ type: ActionType.SET_SELECTED_ITEM, name: currentReleaseName });
 		},
 		[currentReleaseName]
 	);
@@ -353,13 +603,14 @@ function ReleaseHistory({ appName }: Props) {
 		[isCodeReleaseEnabled, isConfigReleaseEnabled]
 	);
 	const scaleReqModifiers = React.useMemo(() => [], []);
-	const {
-		items,
-		nextPageToken,
-		fetchNextPage,
-		loading: releaseHistoryLoading,
-		error: releaseHistoryError
-	} = useReleaseHistory(appName, scaleReqModifiers, deploymentReqModifiers, scalesEnabled, deploymentsEnabled);
+	useReleaseHistoryWithDispatch(
+		appName,
+		scaleReqModifiers,
+		deploymentReqModifiers,
+		scalesEnabled,
+		deploymentsEnabled,
+		dispatch
+	);
 	React.useEffect(
 		() => {
 			if (releaseHistoryError) {
@@ -369,25 +620,7 @@ function ReleaseHistory({ appName }: Props) {
 		[handleError, releaseHistoryError]
 	);
 
-	// Get current formation
-	const { scale: currentScale, loading: currentScaleLoading, error: currentScaleError } = useAppScale(appName);
-	React.useEffect(
-		() => {
-			if (currentScaleError) {
-				handleError(currentScaleError);
-			}
-		},
-		[currentScaleError, handleError]
-	);
-
-	const [selectedResourceType, setSelectedResourceType] = React.useState<SelectedResourceType>(
-		SelectedResourceType.Release
-	);
-	const emptyScaleRequestDiff = React.useMemo<Diff<string, number>>(() => [], []);
-	const [selectedScaleRequestDiff, setSelectedScaleRequestDiff] = React.useState<Diff<string, number>>(
-		emptyScaleRequestDiff
-	);
-
+	// TODO(jvatic): Move this into reducer
 	// keep updated scale request diff
 	React.useEffect(
 		() => {
@@ -398,17 +631,18 @@ function ReleaseHistory({ appName }: Props) {
 				const sr = item && item.isScaleRequest ? item.getScaleRequest() : null;
 				if (sr) {
 					const diff = protoMapDiff((currentScale as ScaleRequest).getNewProcessesMap(), sr.getNewProcessesMap());
-					setSelectedScaleRequestDiff(diff.length ? diff : emptyScaleRequestDiff);
+					dispatch({
+						type: ActionType.SET_SELECTED_SCALE_REQUEST_DIFF,
+						diff: diff.length ? diff : emptyScaleRequestDiff
+					});
 					return;
 				}
 			}
-			setSelectedScaleRequestDiff(emptyScaleRequestDiff);
+			dispatch({ type: ActionType.SET_SELECTED_SCALE_REQUEST_DIFF, diff: emptyScaleRequestDiff });
 		},
-		[currentScale, emptyScaleRequestDiff, isDeploying, items, selectedItemName, selectedResourceType]
+		[currentScale, isDeploying, items, selectedItemName, selectedResourceType]
 	);
 
-	const [nextScale, setNextScale] = React.useState<CreateScaleRequest | null>(null);
-	const [nextReleaseName, setNextReleaseName] = React.useState('');
 	const submitHandler = (e: React.SyntheticEvent) => {
 		e.preventDefault();
 
@@ -416,6 +650,7 @@ function ReleaseHistory({ appName }: Props) {
 			return;
 		}
 
+		const actions: Action[] = [];
 		if (selectedResourceType === SelectedResourceType.ScaleRequest) {
 			// It's a scale request we're deploying
 			const item = items.find((sr) => sr.getName() === selectedItemName);
@@ -427,40 +662,43 @@ function ReleaseHistory({ appName }: Props) {
 			nextScale.setParent(sr.getParent());
 			protoMapReplace(nextScale.getProcessesMap(), sr.getNewProcessesMap());
 			protoMapReplace(nextScale.getTagsMap(), sr.getNewTagsMap());
-			setNextScale(nextScale);
+			actions.push({ type: ActionType.SET_NEXT_SCALE, scale: nextScale });
 			if (selectedItemName.startsWith(currentReleaseName)) {
 				// We're scaling the current release
-				setNextReleaseName(currentReleaseName);
+				actions.push({ type: ActionType.SET_NEXT_RELEASE_NAME, name: currentReleaseName });
 			} else {
 				// We're deploying and scaling a release
-				setNextReleaseName(sr.getParent());
+				actions.push({ type: ActionType.SET_NEXT_RELEASE_NAME, name: sr.getParent() });
 			}
-			setIsDeploying(true);
+			actions.push({ type: ActionType.SET_DEPLOY_STATUS, isDeploying: true });
 		} else {
 			// It's a release we're deploying
-			setNextReleaseName(selectedItemName);
-			setNextScale(null);
-			setIsDeploying(true);
+			actions.push({ type: ActionType.SET_NEXT_RELEASE_NAME, name: selectedItemName });
+			actions.push({ type: ActionType.SET_NEXT_SCALE, scale: null });
+			actions.push({ type: ActionType.SET_DEPLOY_STATUS, isDeploying: true });
 		}
+		dispatch(actions);
 	};
 
 	const handleDeployCancel = () => {
-		setIsDeploying(false);
-		setNextReleaseName('');
-		setNextScale(null);
+		dispatch([
+			{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
+			{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
+			{ type: ActionType.SET_NEXT_SCALE, scale: null }
+		]);
 	};
 
 	const handleDeployComplete = () => {
-		setIsDeploying(false);
-		setNextReleaseName('');
-		setNextScale(null);
+		dispatch([
+			{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
+			{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
+			{ type: ActionType.SET_NEXT_SCALE, scale: null }
+		]);
 	};
 
 	const paddingTopRef = React.useRef<HTMLElement>();
 	const paddingBottomRef = React.useRef<HTMLElement>();
 
-	const [startIndex, setStartIndex] = React.useState(0);
-	const [length, setLength] = React.useState(0);
 	const windowedListState = React.useMemo(() => new WindowedListState(), []);
 	React.useEffect(
 		() => {
@@ -474,8 +712,7 @@ function ReleaseHistory({ appName }: Props) {
 					paddingBottomNode.style.height = state.paddingBottom + 'px';
 				}
 
-				setStartIndex(state.visibleIndexTop);
-				setLength(state.visibleLength);
+				dispatch({ type: ActionType.SET_WINDOW, startIndex: state.visibleIndexTop, length: state.visibleLength });
 			});
 		},
 		[windowedListState]
@@ -499,11 +736,11 @@ function ReleaseHistory({ appName }: Props) {
 	);
 	React.useEffect(() => {
 		// this is called after every render
+		// trigger the useEffect below if/when the ref changes
 		setReleaseHistoryScrollContainerNode(releaseHistoryScrollContainerRef.current || null);
 	}, undefined); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const minPaneHeight = 400;
-	const [paneHeight, setPaneHeight] = React.useState(400);
 	const windowingThresholdTop = 600;
 	const windowingThresholdBottom = 600;
 	React.useEffect(
@@ -517,7 +754,7 @@ function ReleaseHistory({ appName }: Props) {
 				// TODO(jvatic): respond to window resizing
 				const adjustedHeight = Math.max(minPaneHeight, document.documentElement.clientHeight - 142);
 				if (paneHeight !== adjustedHeight) {
-					setPaneHeight(adjustedHeight);
+					dispatch({ type: ActionType.SET_PANE_HEIGHT, height: adjustedHeight });
 				}
 			}
 			windowedListState.length = items.length;
@@ -597,11 +834,17 @@ function ReleaseHistory({ appName }: Props) {
 												isCurrent={currentReleaseName === r.getName()}
 												onChange={(isSelected) => {
 													if (isSelected) {
-														setSelectedItemName(r.getName());
-														setSelectedResourceType(SelectedResourceType.Release);
+														dispatch({
+															type: ActionType.SET_SELECTED_ITEM,
+															name: r.getName(),
+															resourceType: SelectedResourceType.Release
+														});
 													} else {
-														setSelectedItemName(currentReleaseName);
-														setSelectedResourceType(SelectedResourceType.Release);
+														dispatch({
+															type: ActionType.SET_SELECTED_ITEM,
+															name: currentReleaseName,
+															resourceType: SelectedResourceType.Release
+														});
 													}
 												}}
 											/>
@@ -621,11 +864,17 @@ function ReleaseHistory({ appName }: Props) {
 												isCurrent={currentScale ? currentScale.getName() === s.getName() : false}
 												onChange={(isSelected) => {
 													if (isSelected) {
-														setSelectedItemName(s.getName());
-														setSelectedResourceType(SelectedResourceType.ScaleRequest);
+														dispatch({
+															type: ActionType.SET_SELECTED_ITEM,
+															name: s.getName(),
+															resourceType: SelectedResourceType.ScaleRequest
+														});
 													} else {
-														setSelectedItemName(currentReleaseName);
-														setSelectedResourceType(SelectedResourceType.Release);
+														dispatch({
+															type: ActionType.SET_SELECTED_ITEM,
+															name: currentReleaseName,
+															resourceType: SelectedResourceType.Release
+														});
 													}
 												}}
 											/>

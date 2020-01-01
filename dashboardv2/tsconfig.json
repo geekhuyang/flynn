@@ -9,6 +9,7 @@
     "jsx": "preserve",
     "lib": [
       "es6",
+      "es2016.array.include",
       "es2017.object",
       "dom",
       "dom.iterable"
