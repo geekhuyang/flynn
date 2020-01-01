@@ -10,6 +10,9 @@ export default function useApp(appName: string) {
 	const [error, setError] = React.useState<Error | null>(null);
 	React.useEffect(
 		() => {
+			// no-op if called with empty appName
+			if (appName === '') return () => {};
+
 			const cancel = client.streamApps(
 				(res: StreamAppsResponse, error: Error | null) => {
 					setAppLoading(false);
@@ -18,8 +21,11 @@ export default function useApp(appName: string) {
 						return;
 					}
 					const app = res.getAppsList()[0];
-					setApp(app || null);
-					setError(app ? null : new Error('App not found'));
+					if (app) {
+						setApp(app);
+					} else {
+						setError(new Error('App not found'));
+					}
 				},
 				setNameFilters(appName),
 				setPageSize(1),
