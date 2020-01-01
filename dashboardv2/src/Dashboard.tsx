@@ -7,7 +7,7 @@ import { aruba } from 'grommet-theme-aruba';
 import Config from './config';
 import useClient from './useClient';
 import useCallIfMounted from './useCallIfMounted';
-import useRouter from './useRouter';
+import { useLocation } from 'react-router-dom';
 import Split from './Split';
 import Loading from './Loading';
 import AppsListNav from './AppsListNav';
@@ -37,7 +37,7 @@ function appNameFromPath(path: string): string {
  * <Dashboard> is the root component of the dashboard app
  */
 function DashboardInner() {
-	const { location } = useRouter();
+	const location = useLocation();
 	const currentPath = React.useMemo(() => location.pathname || '', [location.pathname]);
 	const [appName, setAppName] = React.useState<string>(appNameFromPath(currentPath));
 	React.useEffect(

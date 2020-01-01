@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { __RouterContext, RouteComponentProps, match as MatchObject } from 'react-router-dom';
+import { useHistory, useLocation, useRouteMatch, match as MatchObject } from 'react-router-dom';
 import * as H from 'history';
 import { Omit } from 'grommet/utils';
 import { navProtectionEnabled, confirmNavigation, getProtectedParams } from './useNavProtection';
@@ -30,7 +30,9 @@ function urlForPath(path: string): URL {
 }
 
 export default function useRouter<TParams = {}>(): UseRouterObejct<TParams> {
-	const { history: _history, location, match } = React.useContext(__RouterContext) as RouteComponentProps<TParams>;
+	const _history = useHistory();
+	const location = useLocation();
+	const match = useRouteMatch<TParams>();
 	const urlParams = React.useMemo(
 		() => {
 			return new URLSearchParams(location.search);
