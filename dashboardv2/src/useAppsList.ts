@@ -22,14 +22,15 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 			setApps([]);
 			const cancel = client.streamApps(
 				(res: StreamAppsResponse, error: Error | null) => {
-					setAppsLoading(false);
 					if (error) {
 						setError(error);
+						setAppsLoading(false);
 						return;
 					}
 					setApps(res.getAppsList());
 					setNextPageToken(res.getNextPageToken());
 					setError(null);
+					setAppsLoading(false);
 				},
 				setPageSize(50),
 				setStreamCreates(),
@@ -54,14 +55,15 @@ export default function useAppsList(reqModifiers: RequestModifier<StreamAppsRequ
 
 			cancel = client.streamApps(
 				(res: StreamAppsResponse, error: Error | null) => {
-					setAppsLoading(false);
 					if (error) {
 						setError(error);
+						setAppsLoading(false);
 						return;
 					}
 					pagesMap.set(pageToken, res.getAppsList());
 					setNextPageToken(res.getNextPageToken());
 					setPageOrder(pageOrder.concat([pageToken]));
+					setAppsLoading(false);
 				},
 				setPageToken(pageToken),
 				...reqModifiers

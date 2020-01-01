@@ -100,12 +100,13 @@ export default function CreateDeployment(props: Props) {
 			callIfMounted(() => {
 				onCreate();
 			});
-		}).catch((error: Error) => {
-			callIfMounted(() => {
-				setIsCreating(false);
-				handleError(error);
-			});
-		});
+		})
+			.catch((error: Error) => {
+				callIfMounted(() => {
+					handleError(error);
+				});
+			})
+			.then(() => callIfMounted(() => setIsCreating(false)));
 	}
 
 	if (isLoading) return <Loading />;

@@ -58,6 +58,7 @@ export default function useReleaseHistory(
 				(res: StreamReleaseHistoryResponse, error: Error | null) => {
 					if (error) {
 						setError(error);
+						setLoading(false);
 						return;
 					}
 
@@ -66,8 +67,8 @@ export default function useReleaseHistory(
 
 					setItems(res.getItemsList());
 					setNextPageToken(new NextPageTokens(res.getScaleRequestsNextPageToken(), res.getDeploymentsNextPageToken()));
-					setLoading(false);
 					setError(null);
+					setLoading(false);
 				},
 				// scale request modifiers
 				[setNameFilters(appName), setPageSize(50), setStreamUpdates(), setStreamCreates(), ...scaleReqModifiers],

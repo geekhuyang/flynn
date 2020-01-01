@@ -27,12 +27,13 @@ export default function useDeployments(
 				(res: StreamDeploymentsResponse, error: Error | null) => {
 					if (error) {
 						setError(error);
+						setLoading(false);
 						return;
 					}
 					setDeployments(res.getDeploymentsList());
 					setNextPageToken(res.getNextPageToken());
-					setLoading(false);
 					setError(null);
+					setLoading(false);
 				},
 				setStreamUpdates(),
 				setStreamCreates(),

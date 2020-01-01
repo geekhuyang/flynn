@@ -28,12 +28,13 @@ export default function useAppScales(
 				(res: StreamScalesResponse, error: Error | null) => {
 					if (error) {
 						setError(error);
+						setLoading(false);
 						return;
 					}
 					setScales(res.getScaleRequestsList());
 					setNextPageToken(res.getNextPageToken());
-					setLoading(false);
 					setError(null);
+					setLoading(false);
 				},
 				setNameFilters(appName),
 				setStreamCreates(),

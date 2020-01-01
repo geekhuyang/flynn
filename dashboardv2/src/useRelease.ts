@@ -13,20 +13,21 @@ export default function useRelease(releaseName: string) {
 			// support being called with empty name
 			// (see <CreateDeployment />)
 			if (!releaseName) {
-				setIsLoading(false);
 				setRelease(null);
 				setError(null);
+				setIsLoading(false);
 				return;
 			}
 			const cancel = client.streamReleases(
 				(res: StreamReleasesResponse, error: Error | null) => {
-					setIsLoading(false);
 					if (error) {
 						setError(error);
+						setIsLoading(false);
 						return;
 					}
 					setRelease(res.getReleasesList()[0] || null);
 					setError(null);
+					setIsLoading(false);
 				},
 				setNameFilters(releaseName),
 				setPageSize(1)

@@ -24,9 +24,10 @@ export default function useAppScale(appName: string) {
 				(res: StreamScalesResponse, error: Error | null) => {
 					if (error) {
 						setError(error);
+						setLoading(false);
 						return;
 					}
-					const scales = res.getScaleRequestsList()
+					const scales = res.getScaleRequestsList();
 					let scale;
 					if (scales.length === 0) {
 						scale = new ScaleRequest();
@@ -35,8 +36,8 @@ export default function useAppScale(appName: string) {
 						scale = scales[0];
 					}
 					setScale(scale);
-					setLoading(false);
 					setError(null);
+					setLoading(false);
 				},
 				setNameFilters(releaseName),
 				filterScalesByState(ScaleRequestState.SCALE_COMPLETE),

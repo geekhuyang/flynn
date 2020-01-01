@@ -15,9 +15,9 @@ export default function useApp(appName: string) {
 
 			const cancel = client.streamApps(
 				(res: StreamAppsResponse, error: Error | null) => {
-					setAppLoading(false);
 					if (error) {
 						setError(error);
+						setAppLoading(false);
 						return;
 					}
 					const app = res.getAppsList()[0];
@@ -26,6 +26,7 @@ export default function useApp(appName: string) {
 					} else {
 						setError(new Error('App not found'));
 					}
+					setAppLoading(false);
 				},
 				setNameFilters(appName),
 				setPageSize(1),
