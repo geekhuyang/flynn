@@ -12,9 +12,9 @@ export default function useAppRelease(appName: string) {
 		() => {
 			const cancel = client.streamDeployments(
 				(res: StreamDeploymentsResponse, error: Error | null) => {
-					setIsLoading(false);
 					if (error) {
 						setError(error);
+						setIsLoading(false);
 						return;
 					}
 					const deployment = res.getDeploymentsList()[0] || new ExpandedDeployment();
@@ -23,6 +23,7 @@ export default function useAppRelease(appName: string) {
 					}
 					setRelease(deployment.getNewRelease() || new Release());
 					setError(null);
+					setIsLoading(false);
 				},
 				setNameFilters(appName),
 				setDeploymentStatusFilters(DeploymentStatus.COMPLETE),

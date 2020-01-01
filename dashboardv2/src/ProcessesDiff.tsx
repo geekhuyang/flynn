@@ -3,11 +3,13 @@ import { Box, BoxProps } from 'grommet';
 
 import ProcessScale from './ProcessScale';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
-import { ScaleRequest, CreateScaleRequest, ScaleRequestState } from './generated/controller_pb';
+import buildProcessesMap from './util/buildProcessesMap';
+import { ScaleRequest, CreateScaleRequest, ScaleRequestState, Release } from './generated/controller_pb';
 
 interface Props extends BoxProps {
 	scale: ScaleRequest;
 	nextScale: CreateScaleRequest;
+	release: Release | null;
 	confirmScaleToZero?: boolean;
 	onConfirmScaleToZeroChange?: (confirmed: boolean) => void;
 }
@@ -15,6 +17,7 @@ interface Props extends BoxProps {
 export default function ProcessesDiff({
 	scale,
 	nextScale,
+	release = null,
 	confirmScaleToZero = true,
 	onConfirmScaleToZeroChange = () => {},
 	direction,
@@ -25,14 +28,14 @@ export default function ProcessesDiff({
 		// keep up-to-date full diff of processes
 		() => {
 			const fullDiff = protoMapDiff(
-				(scale || new ScaleRequest()).getNewProcessesMap(),
-				nextScale.getProcessesMap(),
+				buildProcessesMap((scale || new ScaleRequest()).getNewProcessesMap(), release),
+				buildProcessesMap(nextScale.getProcessesMap(), release),
 				DiffOption.INCLUDE_UNCHANGED,
 				DiffOption.NO_DUPLICATE_KEYS
 			);
 			setProcessesFullDiff(fullDiff);
 		},
-		[nextScale, scale]
+		[nextScale, scale, release]
 	);
 
 	const isPending = scale.getState() === ScaleRequestState.SCALE_PENDING;

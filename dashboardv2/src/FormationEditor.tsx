@@ -4,6 +4,7 @@ import { Box, Button, Text } from 'grommet';
 
 import useClient from './useClient';
 import useAppScale from './useAppScale';
+import useAppRelease from './useAppRelease';
 import useNavProtection from './useNavProtection';
 import useErrorHandler from './useErrorHandler';
 import Loading from './Loading';
@@ -12,6 +13,7 @@ import CreateScaleRequestComponent from './CreateScaleRequest';
 import ProcessScale from './ProcessScale';
 import protoMapDiff, { applyProtoMapDiff, Diff } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
+import buildProcessesMap from './util/buildProcessesMap';
 import { ScaleRequest, ScaleRequestState, CreateScaleRequest } from './generated/controller_pb';
 
 function buildProcessesArray(m: jspb.Map<string, number>): [string, number][] {
@@ -27,7 +29,9 @@ interface Props {
 export default function FormationEditor({ appName }: Props) {
 	const handleError = useErrorHandler();
 	const client = useClient();
-	const { scale, loading: isLoading, error: scaleError } = useAppScale(appName);
+	const { scale, loading: scaleLoading, error: scaleError } = useAppScale(appName);
+	const { release, loading: releaseLoading, error: releaseError } = useAppRelease(appName);
+	const isLoading = scaleLoading || releaseLoading;
 	const [initialProcesses, setInitialProcesses] = React.useState<jspb.Map<string, number>>(
 		new jspb.Map<string, number>([])
 	);
@@ -41,8 +45,11 @@ export default function FormationEditor({ appName }: Props) {
 			if (scaleError) {
 				handleError(scaleError);
 			}
+			if (releaseError) {
+				handleError(releaseError);
+			}
 		},
-		[scaleError, handleError]
+		[scaleError, releaseError, handleError]
 	);
 
 	const [enableNavProtection, disableNavProtection] = useNavProtection();
@@ -60,6 +67,7 @@ export default function FormationEditor({ appName }: Props) {
 	React.useEffect(
 		() => {
 			if (!scale) return;
+			if (!release) return;
 
 			// preserve changes
 			let processesMap = scale.getNewProcessesMap();
@@ -67,8 +75,8 @@ export default function FormationEditor({ appName }: Props) {
 				processesMap = applyProtoMapDiff(processesMap, processesDiff);
 			}
 
-			setProcesses(buildProcessesArray(processesMap));
-			setInitialProcesses(scale.getNewProcessesMap());
+			setProcesses(buildProcessesArray(buildProcessesMap(processesMap, release)));
+			setInitialProcesses(buildProcessesMap(scale.getNewProcessesMap(), release));
 		},
 		[scale] // eslint-disable-line react-hooks/exhaustive-deps
 	);
@@ -117,6 +125,7 @@ export default function FormationEditor({ appName }: Props) {
 
 		// build new formation object with new processes map
 		if (!scale) return; // should never be null at this point
+		if (!release) return; // should never be null at this point
 
 		setIsConfirming(false);
 
@@ -129,7 +138,7 @@ export default function FormationEditor({ appName }: Props) {
 				handleError(error);
 				return;
 			}
-			setProcesses(buildProcessesArray(scaleReq.getNewProcessesMap()));
+			setProcesses(buildProcessesArray(buildProcessesMap(scaleReq.getNewProcessesMap(), release)));
 		});
 	}
 
@@ -147,6 +156,7 @@ export default function FormationEditor({ appName }: Props) {
 	}
 
 	if (!scale) throw new Error('<FormationEditor> Error: Unexpected lack of scale!');
+	if (!release) throw new Error('<FormationEditor> Error: Unexpected lack of release!');
 
 	const isPending = scale.getState() === ScaleRequestState.SCALE_PENDING;
 

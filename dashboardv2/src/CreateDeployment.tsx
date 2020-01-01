@@ -128,6 +128,7 @@ export default function CreateDeployment(props: Props) {
 						margin="small"
 						scale={currentScale}
 						nextScale={newScale}
+						release={currentRelease}
 						onConfirmScaleToZeroChange={(c) => setIsScaleToZeroConfirmed(c)}
 					/>
 				) : null}
