@@ -51,8 +51,7 @@ enum ActionType {
 	SET_NEXT_SCALE = 'SET_NEXT_SCALE',
 	SET_NEXT_RELEASE_NAME = 'SET_NEXT_RELEASE_NAME',
 	SET_WINDOW = 'SET_WINDOW',
-	SET_PANE_HEIGHT = 'SET_PANE_HEIGHT',
-	SET_SELECTED_SCALE_REQUEST_DIFF = 'SET_SELECTED_SCALE_REQUEST_DIFF'
+	SET_PANE_HEIGHT = 'SET_PANE_HEIGHT'
 }
 
 interface SetDeployStatusAction {
@@ -87,11 +86,6 @@ interface SetPaneHeightAction {
 	height: number;
 }
 
-interface SetSelectedScaleRequestDiffAction {
-	type: ActionType.SET_SELECTED_SCALE_REQUEST_DIFF;
-	diff: Diff<string, number>;
-}
-
 type Action =
 	| SetDeployStatusAction
 	| SetSelectedItemAction
@@ -99,7 +93,6 @@ type Action =
 	| SetNextReleaseNameAction
 	| SetWindowAction
 	| SetPaneHeightAction
-	| SetSelectedScaleRequestDiffAction
 	| AppAction
 	| AppScaleAction
 	| ReleaseHistoryAction;
@@ -163,7 +156,7 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 	if (!Array.isArray(actions)) {
 		actions = [actions];
 	}
-	return actions.reduce((prevState: State, action: Action) => {
+	const nextState = actions.reduce((prevState: State, action: Action) => {
 		const nextState = Object.assign({}, prevState);
 		switch (action.type) {
 			case ActionType.SET_DEPLOY_STATUS:
@@ -195,10 +188,6 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 
 			case ActionType.SET_PANE_HEIGHT:
 				nextState.paneHeight = action.height;
-				return nextState;
-
-			case ActionType.SET_SELECTED_SCALE_REQUEST_DIFF:
-				nextState.selectedScaleRequestDiff = action.diff;
 				return nextState;
 
 			// useApp START
@@ -242,6 +231,26 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 				return prevState;
 		}
 	}, prevState);
+
+	if (nextState === prevState) return prevState;
+
+	(() => {
+		if (nextState.selectedResourceType === SelectedResourceType.ScaleRequest) {
+			const item = nextState.releaseHistoryState.allItems.find((sr) => sr.getName() === nextState.selectedItemName);
+			const sr = item && item.isScaleRequest ? item.getScaleRequest() : null;
+			if (sr) {
+				const diff = protoMapDiff(
+					(nextState.currentScale as ScaleRequest).getNewProcessesMap(),
+					sr.getNewProcessesMap()
+				);
+				nextState.selectedScaleRequestDiff = diff.length ? diff : emptyScaleRequestDiff;
+				return;
+			}
+		}
+		nextState.selectedScaleRequestDiff = emptyScaleRequestDiff;
+	})();
+
+	return nextState;
 }
 
 interface MapHistoryProps<T> {
@@ -620,29 +629,6 @@ function ReleaseHistory({ appName }: Props) {
 		[handleError, releaseHistoryError]
 	);
 
-	// TODO(jvatic): Move this into reducer
-	// keep updated scale request diff
-	React.useEffect(
-		() => {
-			if (isDeploying) return;
-
-			if (selectedResourceType === SelectedResourceType.ScaleRequest) {
-				const item = items.find((sr) => sr.getName() === selectedItemName);
-				const sr = item && item.isScaleRequest ? item.getScaleRequest() : null;
-				if (sr) {
-					const diff = protoMapDiff((currentScale as ScaleRequest).getNewProcessesMap(), sr.getNewProcessesMap());
-					dispatch({
-						type: ActionType.SET_SELECTED_SCALE_REQUEST_DIFF,
-						diff: diff.length ? diff : emptyScaleRequestDiff
-					});
-					return;
-				}
-			}
-			dispatch({ type: ActionType.SET_SELECTED_SCALE_REQUEST_DIFF, diff: emptyScaleRequestDiff });
-		},
-		[currentScale, isDeploying, items, selectedItemName, selectedResourceType]
-	);
-
 	const submitHandler = (e: React.SyntheticEvent) => {
 		e.preventDefault();
 
@@ -736,7 +722,7 @@ function ReleaseHistory({ appName }: Props) {
 	);
 	React.useEffect(() => {
 		// this is called after every render
-		// trigger the useEffect below if/when the ref changes
+		// triggers the useEffect below if/when the ref changes
 		setReleaseHistoryScrollContainerNode(releaseHistoryScrollContainerRef.current || null);
 	}, undefined); // eslint-disable-line react-hooks/exhaustive-deps
 
