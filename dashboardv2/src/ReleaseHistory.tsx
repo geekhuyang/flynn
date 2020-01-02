@@ -32,13 +32,17 @@ import {
 	ScaleRequestState
 } from './generated/controller_pb';
 import Loading from './Loading';
-import CreateDeployment from './CreateDeployment';
+import CreateDeployment, {
+	Action as CreateDeploymentAction,
+	ActionType as CreateDeploymentActionType
+} from './CreateDeployment';
 import CreateScaleRequestComponent from './CreateScaleRequest';
 import ReleaseComponent from './Release';
 import WindowedListState from './WindowedListState';
 import WindowedList, { WindowedListItem } from './WindowedList';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
+import isActionType from './util/isActionType';
 
 enum SelectedResourceType {
 	Release = 1,
@@ -95,7 +99,8 @@ type Action =
 	| SetPaneHeightAction
 	| AppAction
 	| AppScaleAction
-	| ReleaseHistoryAction;
+	| ReleaseHistoryAction
+	| CreateDeploymentAction;
 
 interface State {
 	isDeploying: boolean;
@@ -120,6 +125,9 @@ interface State {
 
 	// useReleaseHistory
 	releaseHistoryState: ReleaseHistoryState;
+
+	// <CreateDeployment>
+	createDeploymentError: Error | null;
 }
 
 type Reducer = (prevState: State, actions: Action | Action[]) => State;
@@ -148,7 +156,10 @@ function initialState(): State {
 		currentScaleError: null,
 
 		// useReleaseHistory
-		releaseHistoryState: initialReleaseHistoryState()
+		releaseHistoryState: initialReleaseHistoryState(),
+
+		// <CreateDeployment>
+		createDeploymentError: null
 	};
 }
 
@@ -221,9 +232,29 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 				return nextState;
 			// useAppScale END
 
+			// <CreateDeployment> START
+			case CreateDeploymentActionType.SET_ERROR:
+				nextState.createDeploymentError = action.error;
+				return nextState;
+
+			case CreateDeploymentActionType.CANCEL:
+				return reducer(prevState, [
+					{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
+					{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
+					{ type: ActionType.SET_NEXT_SCALE, scale: null }
+				]);
+
+			case CreateDeploymentActionType.CREATED:
+				return reducer(prevState, [
+					{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
+					{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
+					{ type: ActionType.SET_NEXT_SCALE, scale: null }
+				]);
+			// <CreateDeployment> END
+
 			default:
 				// useReleaseHistory
-				if (Object.values(ReleaseHistoryActionType).includes(action.type)) {
+				if (isActionType<ReleaseHistoryAction>(ReleaseHistoryActionType, action)) {
 					nextState.releaseHistoryState = releaseHistoryReducer(prevState.releaseHistoryState, action);
 					return nextState;
 				}
@@ -506,8 +537,6 @@ export interface Props {
 }
 
 function ReleaseHistory({ appName }: Props) {
-	const handleError = useErrorHandler();
-
 	const [
 		{
 			isDeploying,
@@ -537,31 +566,29 @@ function ReleaseHistory({ appName }: Props) {
 				fetchNextPage,
 				loading: releaseHistoryLoading,
 				error: releaseHistoryError
-			}
+			},
+
+			// <CreateDeployment>
+			createDeploymentError
 		},
 		dispatch
 	] = React.useReducer<Reducer>(reducer, initialState());
 
-	useAppWithDispatch(appName, dispatch);
+	const handleError = useErrorHandler();
 	React.useEffect(
 		() => {
-			if (appError) {
-				handleError(appError);
+			const error = appError || currentScaleError || releaseHistoryError || createDeploymentError;
+			if (error) {
+				handleError(error);
 			}
 		},
-		[appError, handleError]
+		[appError, currentScaleError, releaseHistoryError, createDeploymentError, handleError]
 	);
+
+	useAppWithDispatch(appName, dispatch);
 
 	// Get current formation
 	useAppScaleWithDispatch(appName, dispatch);
-	React.useEffect(
-		() => {
-			if (currentScaleError) {
-				handleError(currentScaleError);
-			}
-		},
-		[currentScaleError, handleError]
-	);
 
 	const currentReleaseName = app ? app.getRelease() : '';
 
@@ -619,14 +646,6 @@ function ReleaseHistory({ appName }: Props) {
 		scalesEnabled,
 		deploymentsEnabled,
 		dispatch
-	);
-	React.useEffect(
-		() => {
-			if (releaseHistoryError) {
-				handleError(releaseHistoryError);
-			}
-		},
-		[handleError, releaseHistoryError]
 	);
 
 	const submitHandler = (e: React.SyntheticEvent) => {
@@ -774,9 +793,7 @@ function ReleaseHistory({ appName }: Props) {
 							appName={appName}
 							releaseName={nextReleaseName}
 							newScale={nextScale || undefined}
-							onCancel={handleDeployCancel}
-							onCreate={handleDeployComplete}
-							handleError={handleError}
+							dispatch={dispatch}
 						/>
 					)}
 				</RightOverlay>

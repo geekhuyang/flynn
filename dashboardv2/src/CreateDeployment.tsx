@@ -4,35 +4,198 @@ import { Box, Button } from 'grommet';
 
 import { Release, CreateScaleRequest } from './generated/controller_pb';
 import useClient from './useClient';
-import useAppRelease from './useAppRelease';
-import useAppScale from './useAppScale';
-import useRelease from './useRelease';
-import useCallIfMounted from './useCallIfMounted';
-import { ErrorHandler } from './useErrorHandler';
+import useMergeDispatch from './useMergeDispatch';
+import {
+	useAppReleaseWithDispatch,
+	State as AppReleaseState,
+	initialState as initialAppReleaseState,
+	reducer as appReleaseReducer,
+	ActionType as AppReleaseActionType,
+	Action as AppReleaseAction
+} from './useAppRelease';
+import {
+	useAppScaleWithDispatch,
+	State as AppScaleState,
+	initialState as initialAppScaleState,
+	reducer as appScaleReducer,
+	ActionType as AppScaleActionType,
+	Action as AppScaleAction
+} from './useAppScale';
+import {
+	useReleaseWithDispatch,
+	State as ReleaseState,
+	initialState as initialReleaseState,
+	reducer as releaseReducer,
+	ActionType as ReleaseActionType,
+	Action as ReleaseAction
+} from './useRelease';
+import isActionType from './util/isActionType';
+import useWithCancel from './useWithCancel';
 import Loading from './Loading';
 import ReleaseComponent from './Release';
 import ProcessesDiff from './ProcessesDiff';
+
+export enum ActionType {
+	SET_CREATING = 'CreateDeployment__SET_CREATING',
+	SET_ERROR = 'CreateDeployment__SET_ERROR',
+	SET_SCALE_TO_ZERO_CONFIRMED = 'CreateDeployment__SET_SCALE_TO_ZERO_CONFIRMED',
+	CANCEL = 'CreateDeployment__CANCEL',
+	CREATED = 'CreateDeployment__CREATED'
+}
+
+interface SetCreatingAction {
+	type: ActionType.SET_CREATING;
+	creating: boolean;
+}
+
+interface SetErrorAction {
+	type: ActionType.SET_ERROR;
+	error: Error;
+}
+
+interface SetScaleToZeroConfirmedAction {
+	type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED;
+	confirmed: boolean;
+}
+
+interface CancelAction {
+	type: ActionType.CANCEL;
+}
+
+interface CreatedAction {
+	type: ActionType.CREATED;
+}
+
+export type Action =
+	| SetScaleToZeroConfirmedAction
+	| SetCreatingAction
+	| SetErrorAction
+	| AppReleaseAction
+	| AppScaleAction
+	| ReleaseAction
+	| CancelAction
+	| CreatedAction;
+
+type Dispatcher = (actions: Action | Action[]) => void;
+
+interface State {
+	// useAppRelease
+	currentReleaseState: AppReleaseState;
+
+	// useAppScale
+	currentScaleState: AppScaleState;
+
+	// useRelease
+	nextReleaseState: ReleaseState;
+
+	isCreating: boolean;
+	isScaleToZeroConfirmed: boolean;
+}
+
+function initialState(props: Props): State {
+	return {
+		// useAppRelease
+		currentReleaseState: initialAppReleaseState(),
+
+		// useAppScale
+		currentScaleState: initialAppScaleState(),
+
+		// useRelease
+		nextReleaseState: initialReleaseState(),
+
+		isCreating: false,
+		isScaleToZeroConfirmed: !props.newScale
+	};
+}
+
+type Reducer = (prevState: State, actions: Action | Action[]) => State;
+
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
+	}
+	return actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case ActionType.SET_CREATING:
+				nextState.isCreating = action.creating;
+				return nextState;
+
+			case ActionType.SET_ERROR:
+				// no-op, parent component is expected to handle this
+				return prevState;
+
+			case ActionType.SET_SCALE_TO_ZERO_CONFIRMED:
+				nextState.isScaleToZeroConfirmed = action.confirmed;
+				return nextState;
+
+			default:
+				// useAppRelease
+				if (isActionType<AppReleaseAction>(AppReleaseActionType, action)) {
+					nextState.currentReleaseState = appReleaseReducer(prevState.currentReleaseState, action);
+					return nextState;
+				}
+
+				// useAppScale
+				if (isActionType<AppScaleAction>(AppScaleActionType, action)) {
+					nextState.currentScaleState = appScaleReducer(prevState.currentScaleState, action);
+					return nextState;
+				}
+
+				// useRelease
+				if (isActionType<ReleaseAction>(ReleaseActionType, action)) {
+					nextState.nextReleaseState = releaseReducer(prevState.nextReleaseState, action);
+					return nextState;
+				}
+
+				return prevState;
+		}
+	}, prevState);
+}
 
 interface Props {
 	appName: string;
 	releaseName?: string;
 	newRelease?: Release;
 	newScale?: CreateScaleRequest;
-	onCancel: () => void;
-	onCreate: () => void;
-	handleError: ErrorHandler;
+	dispatch: Dispatcher;
 }
 
 export default function CreateDeployment(props: Props) {
 	const client = useClient();
 	const newRelease = props.newRelease;
 	const newScale = props.newScale;
-	const { release: currentRelease, loading: currentReleaseLoading, error: currentReleaseError } = useAppRelease(
-		props.appName
-	);
-	const { scale: currentScale, loading: currentScaleLoading, error: currentScaleError } = useAppScale(props.appName);
-	const { release: nextRelease, loading: nextReleaseLoading, error: nextReleaseError } = useRelease(
-		props.releaseName || ''
+	const callerDispatch = props.dispatch;
+
+	const [
+		{
+			// useAppRelease
+			currentReleaseState: { release: currentRelease, loading: currentReleaseLoading, error: currentReleaseError },
+
+			// useAppScale
+			currentScaleState: { scale: currentScale, loading: currentScaleLoading, error: currentScaleError },
+
+			// useRelease
+			nextReleaseState: { release: nextRelease, loading: nextReleaseLoading, error: nextReleaseError },
+
+			isCreating,
+			isScaleToZeroConfirmed
+		},
+		localDispatch
+	] = React.useReducer(reducer, initialState(props));
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
+
+	useAppReleaseWithDispatch(props.appName, dispatch);
+	useAppScaleWithDispatch(props.appName, dispatch);
+	useReleaseWithDispatch(props.releaseName || '', dispatch);
+	React.useEffect(
+		() => {
+			const error = currentReleaseError || nextReleaseError || currentScaleError;
+			if (error) {
+				dispatch({ type: ActionType.SET_ERROR, error });
+			}
+		},
+		[currentReleaseError, nextReleaseError, currentScaleError, dispatch]
 	);
 	const isLoading = React.useMemo(
 		() => {
@@ -40,32 +203,20 @@ export default function CreateDeployment(props: Props) {
 		},
 		[currentReleaseLoading, nextReleaseLoading, currentScaleLoading]
 	);
-	const [isCreating, setIsCreating] = React.useState(false);
-	const [isScaleToZeroConfirmed, setIsScaleToZeroConfirmed] = React.useState(!props.newScale);
-	const handleError = props.handleError;
 
-	React.useEffect(
-		() => {
-			const error = currentReleaseError || nextReleaseError || currentScaleError;
-			if (error) {
-				handleError(error);
-			}
-		},
-		[currentReleaseError, nextReleaseError, currentScaleError, handleError]
-	);
-
-	const callIfMounted = useCallIfMounted();
+	const withCancel = useWithCancel();
 
 	function createRelease(newRelease: Release) {
 		const { appName } = props;
 		return new Promise((resolve, reject) => {
-			client.createRelease(appName, newRelease, (release: Release, error: Error | null) => {
+			const cancel = client.createRelease(appName, newRelease, (release: Release, error: Error | null) => {
 				if (release && error === null) {
 					resolve(release);
 				} else {
 					reject(error);
 				}
 			});
+			withCancel.set(`createRelease(${appName})`, cancel);
 		}) as Promise<Release>;
 	}
 
@@ -75,19 +226,20 @@ export default function CreateDeployment(props: Props) {
 			resolve = rs;
 			reject = rj;
 		});
-		client.createDeployment(release.getName(), scale || null, (error: Error | null) => {
+		const cancel = client.createDeployment(release.getName(), scale || null, (error: Error | null) => {
 			if (error) {
 				reject(error);
 			}
 			resolve();
 		});
+		withCancel.set(`createDeployment(${release.getName()})`, cancel);
 		return p;
 	}
 
 	function handleFormSubmit(e: React.SyntheticEvent) {
 		e.preventDefault();
-		const { onCreate, newScale } = props;
-		setIsCreating(true);
+		const { newScale } = props;
+		dispatch({ type: ActionType.SET_CREATING, creating: true });
 		let p = Promise.resolve(null) as Promise<any>;
 		if (newRelease) {
 			p = createRelease(newRelease).then((release: Release) => {
@@ -97,16 +249,10 @@ export default function CreateDeployment(props: Props) {
 			p = createDeployment(nextRelease, newScale);
 		}
 		p.then(() => {
-			callIfMounted(() => {
-				onCreate();
-			});
-		})
-			.catch((error: Error) => {
-				callIfMounted(() => {
-					handleError(error);
-				});
-			})
-			.then(() => callIfMounted(() => setIsCreating(false)));
+			dispatch([{ type: ActionType.SET_CREATING, creating: false }, { type: ActionType.CREATED }]);
+		}).catch((error: Error) => {
+			dispatch({ type: ActionType.SET_ERROR, error });
+		});
 	}
 
 	if (isLoading) return <Loading />;
@@ -130,7 +276,9 @@ export default function CreateDeployment(props: Props) {
 						scale={currentScale}
 						nextScale={newScale}
 						release={currentRelease}
-						onConfirmScaleToZeroChange={(c) => setIsScaleToZeroConfirmed(c)}
+						onConfirmScaleToZeroChange={(confirmed) =>
+							dispatch({ type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED, confirmed })
+						}
 					/>
 				) : null}
 			</Box>
@@ -148,7 +296,7 @@ export default function CreateDeployment(props: Props) {
 					label="Cancel"
 					onClick={(e: React.SyntheticEvent) => {
 						e.preventDefault();
-						props.onCancel();
+						dispatch({ type: ActionType.CANCEL });
 					}}
 				/>
 			</Box>

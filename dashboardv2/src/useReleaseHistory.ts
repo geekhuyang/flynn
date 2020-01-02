@@ -1,5 +1,6 @@
 import * as React from 'react';
 import useClient from './useClient';
+import useMergeDispatch from './useMergeDispatch';
 import {
 	Client,
 	RequestModifier,
@@ -238,13 +239,7 @@ export function useReleaseHistoryWithDispatch(
 ) {
 	const client = useClient();
 	const [{ pagesMap }, localDispatch] = React.useReducer(reducer, initialState());
-	const dispatch = React.useCallback(
-		(actions: Action | Action[]) => {
-			localDispatch(actions);
-			callerDispatch(actions);
-		},
-		[localDispatch, callerDispatch]
-	);
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
 	if (scaleReqModifiers.length === 0) {
 		scaleReqModifiers = emptyScaleReqModifiersArray;
 	}

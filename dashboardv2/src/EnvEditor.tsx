@@ -1,10 +1,14 @@
 import * as React from 'react';
 import * as jspb from 'google-protobuf';
 import Loading from './Loading';
-import CreateDeployment from './CreateDeployment';
+import CreateDeployment, {
+	Action as CreateDeploymentAction,
+	ActionType as CreateDeploymentActionType
+} from './CreateDeployment';
 import KeyValueEditor, {
 	Data,
 	dataReducer,
+	DataAction,
 	DataActionType,
 	Action as KVEditorAction,
 	ActionType as KVEditorActionType,
@@ -13,6 +17,7 @@ import KeyValueEditor, {
 } from './KeyValueEditor';
 import protoMapDiff, { applyProtoMapDiff } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
+import isActionType from './util/isActionType';
 import useErrorHandler from './useErrorHandler';
 import { Release } from './generated/controller_pb';
 import RightOverlay from './RightOverlay';
@@ -38,8 +43,7 @@ function initialState(props: Props): State {
 
 enum ActionType {
 	INIT_DATA = 'INIT_DATA',
-	DEPLOY_DISMISS = 'DEPLOY_DISMISS',
-	DEPLOY_SUCCESS = 'DEPLOY_SUCCESS'
+	DEPLOY_DISMISS = 'DEPLOY_DISMISS'
 }
 
 interface InitDataAction {
@@ -51,36 +55,47 @@ interface DeployDismissAction {
 	type: ActionType.DEPLOY_DISMISS;
 }
 
-interface DeploySuccessAction {
-	type: ActionType.DEPLOY_SUCCESS;
-}
+type Action = InitDataAction | DeployDismissAction | KVEditorAction | CreateDeploymentAction;
 
-type Action = InitDataAction | DeployDismissAction | DeploySuccessAction | KVEditorAction;
-
-function reducer(prevState: State, action: Action): State {
-	const nextState = Object.assign({}, prevState);
-	switch (action.type) {
-		case ActionType.INIT_DATA:
-			nextState.data = action.data;
-			break;
-		case KVEditorActionType.SET_DATA:
-			nextState.data = action.data;
-			break;
-		case KVEditorActionType.SUBMIT_DATA:
-			nextState.data = action.data;
-			nextState.isDeploying = true;
-			break;
-		case ActionType.DEPLOY_DISMISS:
-			nextState.isDeploying = false;
-			break;
-		case ActionType.DEPLOY_SUCCESS:
-			nextState.isDeploying = false;
-			nextState.data = buildData([]);
-			break;
-		default:
-			nextState.data = dataReducer(prevState.data, action);
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
 	}
-	return nextState;
+	return actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case ActionType.INIT_DATA:
+				nextState.data = action.data;
+				return nextState;
+
+			case KVEditorActionType.SET_DATA:
+				nextState.data = action.data;
+				return nextState;
+
+			case KVEditorActionType.SUBMIT_DATA:
+				nextState.data = action.data;
+				nextState.isDeploying = true;
+				return nextState;
+
+			case CreateDeploymentActionType.CANCEL:
+			case ActionType.DEPLOY_DISMISS:
+				nextState.isDeploying = false;
+				return nextState;
+
+			case CreateDeploymentActionType.CREATED:
+				nextState.isDeploying = false;
+				nextState.data = buildData([]);
+				return nextState;
+
+			default:
+				if (isActionType<DataAction>(DataActionType, action)) {
+					nextState.data = dataReducer(prevState.data, action);
+					return nextState;
+				}
+
+				return prevState;
+		}
+	}, prevState);
 }
 
 export default function EnvEditor(props: Props) {
@@ -140,10 +155,6 @@ export default function EnvEditor(props: Props) {
 		dispatch({ type: ActionType.DEPLOY_DISMISS });
 	}, []);
 
-	const handleDeployComplete = React.useCallback(() => {
-		dispatch({ type: ActionType.DEPLOY_SUCCESS });
-	}, []);
-
 	if (releaseIsLoading) {
 		return <Loading />;
 	}
@@ -154,13 +165,7 @@ export default function EnvEditor(props: Props) {
 		<>
 			{isDeploying ? (
 				<RightOverlay onClose={handleDeployDismiss}>
-					<CreateDeployment
-						appName={appName}
-						newRelease={newRelease || new Release()}
-						onCancel={handleDeployDismiss}
-						onCreate={handleDeployComplete}
-						handleError={handleError}
-					/>
+					<CreateDeployment appName={appName} newRelease={newRelease || new Release()} dispatch={dispatch} />
 				</RightOverlay>
 			) : null}
 			<KeyValueEditor

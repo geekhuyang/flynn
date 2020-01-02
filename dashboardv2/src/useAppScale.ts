@@ -1,5 +1,6 @@
 import * as React from 'react';
 import useClient from './useClient';
+import useMergeDispatch from './useMergeDispatch';
 import { useAppWithDispatch, Action as AppAction, ActionType as AppActionType } from './useApp';
 import { setNameFilters, filterScalesByState, setPageSize, setStreamCreates, setStreamUpdates } from './client';
 import { ScaleRequest, ScaleRequestState, StreamScalesResponse } from './generated/controller_pb';
@@ -29,7 +30,7 @@ export type Action = SetScaleAction | SetErrorAction | SetLoadingAction | AppAct
 
 type Dispatcher = (actions: Action | Action[]) => void;
 
-interface State {
+export interface State {
 	scale: ScaleRequest | null;
 	error: Error | null;
 	loading: boolean;
@@ -39,7 +40,7 @@ interface State {
 	appError: Error | null;
 }
 
-function initialState(): State {
+export function initialState(): State {
 	return {
 		scale: null,
 		error: null,
@@ -53,7 +54,7 @@ function initialState(): State {
 
 type Reducer = (prevState: State, actions: Action | Action[]) => State;
 
-function reducer(prevState: State, actions: Action | Action[]): State {
+export function reducer(prevState: State, actions: Action | Action[]): State {
 	if (!Array.isArray(actions)) {
 		actions = [actions];
 	}
@@ -98,13 +99,7 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 export function useAppScaleWithDispatch(appName: string, callerDispatch: Dispatcher) {
 	const client = useClient();
 	const [{ releaseName }, localDispatch] = React.useReducer(reducer, initialState());
-	const dispatch = React.useCallback(
-		(actions: Action | Action[]) => {
-			localDispatch(actions);
-			callerDispatch(actions);
-		},
-		[localDispatch, callerDispatch]
-	);
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
 	useAppWithDispatch(appName, dispatch);
 	React.useEffect(
 		() => {
