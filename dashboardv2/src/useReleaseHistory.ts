@@ -61,15 +61,12 @@ function fetchNextPageFactory(
 		const scaleRequestsNextPageToken = pageTokens.scales;
 		const deploymentsNextPageToken = pageTokens.deployments;
 
-		dispatch({ type: ActionType.SET_LOADING, loading: true });
+		dispatch({ type: ActionType.SET_NEXT_PAGE_LOADING, loading: true });
 
 		cancel = client.streamReleaseHistory(
 			(res: StreamReleaseHistoryResponse, error: Error | null) => {
 				if (error) {
-					dispatch([
-						{ type: ActionType.SET_LOADING, loading: true },
-						{ type: ActionType.SET_NEXT_PAGE_LOADING, loading: false }
-					]);
+					dispatch({ type: ActionType.SET_NEXT_PAGE_LOADING, loading: false });
 					return;
 				}
 
@@ -202,6 +199,14 @@ export function reducer(prevState: State, actions: Action | Action[]): State {
 
 			case ActionType.SET_LOADING:
 				nextState.loading = action.loading;
+				return nextState;
+
+			case ActionType.SET_NEXT_PAGE_TOKEN:
+				nextState.nextPageToken = action.token;
+				return nextState;
+
+			case ActionType.SET_NEXT_PAGE_LOADING:
+				nextState.nextPageLoading = action.loading;
 				return nextState;
 
 			case ActionType.PUSH_PAGE:
