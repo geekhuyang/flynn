@@ -188,9 +188,10 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 			processesDiff
 		} = nextState;
 		const {
-			scaleState: { scale: prevScale }
+			scaleState: { scale: prevScale },
+			releaseState: { release: prevRelease }
 		} = prevState;
-		if (scale === prevScale) return;
+		if (scale === prevScale && release === prevRelease) return;
 		if (!scale || !release) return;
 
 		let processesMap = scale.getNewProcessesMap();
