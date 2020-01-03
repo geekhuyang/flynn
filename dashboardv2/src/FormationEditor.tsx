@@ -3,18 +3,116 @@ import * as jspb from 'google-protobuf';
 import { Box, Button, Text } from 'grommet';
 
 import useClient from './useClient';
-import useAppScale from './useAppScale';
-import useAppRelease from './useAppRelease';
+import useMergeDispatch from './useMergeDispatch';
+import {
+	useAppReleaseWithDispatch,
+	State as AppReleaseState,
+	initialState as initialAppReleaseState,
+	reducer as appReleaseReducer,
+	ActionType as AppReleaseActionType,
+	Action as AppReleaseAction
+} from './useAppRelease';
+import {
+	useAppScaleWithDispatch,
+	State as AppScaleState,
+	initialState as initialAppScaleState,
+	reducer as appScaleReducer,
+	ActionType as AppScaleActionType,
+	Action as AppScaleAction
+} from './useAppScale';
+import isActionType from './util/isActionType';
+import useWithCancel from './useWithCancel';
 import useNavProtection from './useNavProtection';
-import useErrorHandler from './useErrorHandler';
 import Loading from './Loading';
 import RightOverlay from './RightOverlay';
-import CreateScaleRequestComponent from './CreateScaleRequest';
+import CreateScaleRequestComponent, {
+	Action as CreateScaleRequestAction,
+	ActionType as CreateScaleRequestActionType
+} from './CreateScaleRequest';
 import ProcessScale from './ProcessScale';
 import protoMapDiff, { applyProtoMapDiff, Diff } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
 import buildProcessesMap from './util/buildProcessesMap';
 import { ScaleRequest, ScaleRequestState, CreateScaleRequest } from './generated/controller_pb';
+
+export enum ActionType {
+	SET_PROCESSES = 'FormationEditor__SET_PROCESSES',
+	PROCESS_CHANGE = 'FormationEditor__PROCESS_CHANGE',
+	RESET = 'FormationEditor__RESET',
+	SET_CONFIRMING = 'FormationEditor__SET_CONFIRMING',
+	SET_ERROR = 'FormationEditor__SET_ERROR'
+}
+
+interface SetProcessesAction {
+	type: ActionType.SET_PROCESSES;
+	processes: [string, number][];
+}
+
+interface ProcessChangeAction {
+	type: ActionType.PROCESS_CHANGE;
+	key: string;
+	val: number;
+}
+
+interface ResetAction {
+	type: ActionType.RESET;
+}
+
+interface SetConfirmingAction {
+	type: ActionType.SET_CONFIRMING;
+	confirming: boolean;
+}
+
+interface SetErrorAction {
+	type: ActionType.SET_ERROR;
+	error: Error;
+}
+
+export type Action =
+	| SetProcessesAction
+	| ProcessChangeAction
+	| ResetAction
+	| SetConfirmingAction
+	| SetErrorAction
+	| AppReleaseAction
+	| AppScaleAction
+	| CreateScaleRequestAction;
+
+type Dispatcher = (actions: Action | Action[]) => void;
+
+interface State {
+	// useAppRelease
+	releaseState: AppReleaseState;
+
+	// useAppScale
+	scaleState: AppScaleState;
+
+	initialProcesses: jspb.Map<string, number>;
+	processes: [string, number][];
+	processesDiff: Diff<string, number>;
+	hasChanges: boolean;
+	isConfirming: boolean;
+	nextScale: CreateScaleRequest;
+}
+
+function initialState(props: Props): State {
+	return {
+		// useAppRelease
+		releaseState: initialAppReleaseState(),
+
+		// useAppScale
+		scaleState: initialAppScaleState(),
+
+		initialProcesses: new jspb.Map<string, number>([]),
+		processes: [],
+		processesDiff: [],
+		hasChanges: false,
+		isConfirming: false,
+		nextScale: new CreateScaleRequest()
+	};
+}
+
+type Reducer = (prevState: State, actions: Action | Action[]) => State;
 
 function buildProcessesArray(m: jspb.Map<string, number>): [string, number][] {
 	return Array.from(m.getEntryList()).sort(([ak, av]: [string, number], [bk, bv]: [string, number]) => {
@@ -22,34 +120,164 @@ function buildProcessesArray(m: jspb.Map<string, number>): [string, number][] {
 	});
 }
 
-interface Props {
-	appName: string;
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
+	}
+	const nextState = actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case ActionType.SET_PROCESSES:
+				nextState.processes = action.processes;
+				return nextState;
+
+			case ActionType.PROCESS_CHANGE:
+				nextState.processes = prevState.processes.map(([k, v]: [string, number]) => {
+					if (k === action.key) {
+						return [k, action.val];
+					}
+					return [k, v];
+				}) as [string, number][];
+
+				return nextState;
+
+			case ActionType.RESET:
+				nextState.processes = buildProcessesArray(prevState.initialProcesses);
+				return nextState;
+
+			case ActionType.SET_CONFIRMING:
+				nextState.isConfirming = action.confirming;
+				return nextState;
+
+			case ActionType.SET_ERROR:
+				// no-op, parent component is expected to handle this
+				// see <AppComponent>
+				return prevState;
+
+			case CreateScaleRequestActionType.CREATED:
+				return reducer(prevState, { type: ActionType.SET_CONFIRMING, confirming: false });
+
+			case CreateScaleRequestActionType.CANCEL:
+				return reducer(prevState, { type: ActionType.SET_CONFIRMING, confirming: false });
+
+			default:
+				// useAppRelease
+				if (isActionType<AppReleaseAction>(AppReleaseActionType, action)) {
+					nextState.releaseState = appReleaseReducer(prevState.releaseState, action);
+					return nextState;
+				}
+
+				// useAppScale
+				if (isActionType<AppScaleAction>(AppScaleActionType, action)) {
+					nextState.scaleState = appScaleReducer(prevState.scaleState, action);
+					return nextState;
+				}
+
+				return prevState;
+		}
+	}, prevState);
+
+	if (nextState === prevState) return prevState;
+
+	// preserve changes
+	(() => {
+		const {
+			scaleState: { scale },
+			releaseState: { release },
+			hasChanges,
+			processesDiff
+		} = nextState;
+		const {
+			scaleState: { scale: prevScale }
+		} = prevState;
+		if (scale === prevScale) return;
+		if (!scale || !release) return;
+
+		let processesMap = scale.getNewProcessesMap();
+		if (hasChanges) {
+			processesMap = applyProtoMapDiff(processesMap, processesDiff);
+		}
+
+		nextState.processes = buildProcessesArray(buildProcessesMap(processesMap, release));
+		nextState.initialProcesses = buildProcessesMap(scale.getNewProcessesMap(), release);
+	})();
+
+	// set `processesDiff` and `hasChanges` when `processes` changes
+	(() => {
+		const { initialProcesses, processes } = nextState;
+
+		const { processes: prevProcesses } = prevState;
+		if (processes === prevProcesses) return;
+
+		const diff = protoMapDiff(initialProcesses, new jspb.Map(processes));
+		nextState.processesDiff = diff;
+		nextState.hasChanges = diff.length > 0;
+	})();
+
+	// used to render diff
+	(() => {
+		const {
+			scaleState: { scale },
+			processes
+		} = nextState;
+
+		const {
+			scaleState: { scale: prevScale },
+			processes: prevProcesses
+		} = prevState;
+		if (scale === prevScale && processes === prevProcesses) return;
+
+		const s = new CreateScaleRequest();
+		if (scale) {
+			s.setParent(scale.getParent());
+			protoMapReplace(s.getTagsMap(), scale.getNewTagsMap());
+		}
+		protoMapReplace(s.getProcessesMap(), new jspb.Map(processes));
+		nextState.nextScale = s;
+	})();
+
+	return nextState;
 }
 
-export default function FormationEditor({ appName }: Props) {
-	const handleError = useErrorHandler();
+interface Props {
+	appName: string;
+	dispatch: Dispatcher;
+}
+
+export default function FormationEditor(props: Props) {
+	const { appName, dispatch: callerDispatch } = props;
 	const client = useClient();
-	const { scale, loading: scaleLoading, error: scaleError } = useAppScale(appName);
-	const { release, loading: releaseLoading, error: releaseError } = useAppRelease(appName);
+	const withCancel = useWithCancel();
+
+	const [
+		{
+			// useAppRelease
+			releaseState: { release, loading: releaseLoading, error: releaseError },
+
+			// useAppScale
+			scaleState: { scale, loading: scaleLoading, error: scaleError },
+
+			processes,
+			hasChanges,
+			isConfirming,
+			nextScale
+		},
+		localDispatch
+	] = React.useReducer(reducer, initialState(props));
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
+	useAppScaleWithDispatch(appName, dispatch);
+	useAppReleaseWithDispatch(appName, dispatch);
+
 	const isLoading = scaleLoading || releaseLoading;
-	const [initialProcesses, setInitialProcesses] = React.useState<jspb.Map<string, number>>(
-		new jspb.Map<string, number>([])
-	);
-	const [processes, setProcesses] = React.useState<[string, number][]>([]);
-	const [processesDiff, setProcessesDiff] = React.useState<Diff<string, number>>([]);
-	const [hasChanges, setHasChanges] = React.useState(false);
-	const [isConfirming, setIsConfirming] = React.useState(false);
 
 	React.useEffect(
 		() => {
-			if (scaleError) {
-				handleError(scaleError);
-			}
-			if (releaseError) {
-				handleError(releaseError);
+			const error = scaleError || releaseError;
+			if (error) {
+				dispatch({ type: ActionType.SET_ERROR, error });
 			}
 		},
-		[scaleError, releaseError, handleError]
+		[scaleError, releaseError, dispatch]
 	);
 
 	const [enableNavProtection, disableNavProtection] = useNavProtection();
@@ -64,60 +292,9 @@ export default function FormationEditor({ appName }: Props) {
 		[hasChanges] // eslint-disable-line react-hooks/exhaustive-deps
 	);
 
-	React.useEffect(
-		() => {
-			if (!scale) return;
-			if (!release) return;
-
-			// preserve changes
-			let processesMap = scale.getNewProcessesMap();
-			if (hasChanges) {
-				processesMap = applyProtoMapDiff(processesMap, processesDiff);
-			}
-
-			setProcesses(buildProcessesArray(buildProcessesMap(processesMap, release)));
-			setInitialProcesses(buildProcessesMap(scale.getNewProcessesMap(), release));
-		},
-		[scale] // eslint-disable-line react-hooks/exhaustive-deps
-	);
-
-	// set `processesDiff`, `processesFullDiff`, and `hasChanges` when
-	// `processes` changes
-	React.useEffect(
-		() => {
-			const diff = protoMapDiff(initialProcesses, new jspb.Map(processes));
-			setProcessesDiff(diff);
-			setHasChanges(diff.length > 0);
-		},
-		[processes] // eslint-disable-line react-hooks/exhaustive-deps
-	);
-
-	// used to render diff
-	const nextScale = React.useMemo(
-		() => {
-			const s = new CreateScaleRequest();
-			if (scale) {
-				s.setParent(scale.getParent());
-				protoMapReplace(s.getTagsMap(), scale.getNewTagsMap());
-			}
-			protoMapReplace(s.getProcessesMap(), new jspb.Map(processes));
-			return s;
-		},
-		[processes, scale]
-	);
-
-	function handleProcessChange(key: string, val: number) {
-		setProcesses(processes.map(([k, v]: [string, number]) => {
-			if (k === key) {
-				return [k, val];
-			}
-			return [k, v];
-		}) as [string, number][]);
-	}
-
 	function handleSubmit(e: React.SyntheticEvent) {
 		e.preventDefault();
-		setIsConfirming(true);
+		dispatch({ type: ActionType.SET_CONFIRMING, confirming: true });
 	}
 
 	function handleConfirmSubmit(e: React.SyntheticEvent) {
@@ -127,28 +304,28 @@ export default function FormationEditor({ appName }: Props) {
 		if (!scale) return; // should never be null at this point
 		if (!release) return; // should never be null at this point
 
-		setIsConfirming(false);
+		dispatch({ type: ActionType.SET_CONFIRMING, confirming: false });
 
 		const req = new CreateScaleRequest();
 		req.setParent(scale.getParent());
 		protoMapReplace(req.getProcessesMap(), new jspb.Map(processes));
 		protoMapReplace(req.getTagsMap(), scale.getNewTagsMap());
-		client.createScale(req, (scaleReq: ScaleRequest, error: Error | null) => {
+		const cancel = client.createScale(req, (scaleReq: ScaleRequest, error: Error | null) => {
 			if (error) {
-				handleError(error);
+				dispatch({ type: ActionType.SET_ERROR, error });
 				return;
 			}
-			setProcesses(buildProcessesArray(buildProcessesMap(scaleReq.getNewProcessesMap(), release)));
+			dispatch({
+				type: ActionType.SET_PROCESSES,
+				processes: buildProcessesArray(buildProcessesMap(scaleReq.getNewProcessesMap(), release))
+			});
 		});
+		withCancel.set(`createScale(${req.getParent()})`, cancel);
 	}
-
-	const handleScaleCreated = () => {
-		setIsConfirming(false);
-	};
 
 	const handleScaleCancel = (e?: React.SyntheticEvent) => {
 		e ? e.preventDefault() : void 0;
-		setIsConfirming(false);
+		dispatch({ type: ActionType.SET_CONFIRMING, confirming: false });
 	};
 
 	if (isLoading) {
@@ -164,13 +341,7 @@ export default function FormationEditor({ appName }: Props) {
 		<>
 			{isConfirming ? (
 				<RightOverlay onClose={handleScaleCancel}>
-					<CreateScaleRequestComponent
-						appName={appName}
-						nextScale={nextScale}
-						onCancel={handleScaleCancel}
-						onCreate={handleScaleCreated}
-						handleError={handleError}
-					/>
+					<CreateScaleRequestComponent appName={appName} nextScale={nextScale} dispatch={dispatch} />
 				</RightOverlay>
 			) : null}
 
@@ -186,7 +357,7 @@ export default function FormationEditor({ appName }: Props) {
 									label={key}
 									editable
 									onChange={(newVal) => {
-										handleProcessChange(key, newVal);
+										dispatch({ type: ActionType.PROCESS_CHANGE, key, val: newVal });
 									}}
 								/>
 							</Box>
@@ -203,7 +374,7 @@ export default function FormationEditor({ appName }: Props) {
 								label="Reset"
 								onClick={(e: React.SyntheticEvent) => {
 									e.preventDefault();
-									setProcesses(buildProcessesArray(initialProcesses));
+									dispatch({ type: ActionType.RESET });
 								}}
 							/>
 						</>

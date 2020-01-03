@@ -28,13 +28,13 @@ export type Action = SetAppAction | SetErrorAction | SetLoadingAction;
 
 type Dispatcher = (actions: Action | Action[]) => void;
 
-interface State {
+export interface State {
 	app: App | null;
 	loading: boolean;
 	error: Error | null;
 }
 
-function initialState(): State {
+export function initialState(): State {
 	return {
 		app: null,
 		loading: true,
@@ -44,7 +44,7 @@ function initialState(): State {
 
 type Reducer = (prevState: State, actions: Action | Action[]) => State;
 
-function reducer(prevState: State, actions: Action | Action[]): State {
+export function reducer(prevState: State, actions: Action | Action[]): State {
 	if (!Array.isArray(actions)) {
 		actions = [actions];
 	}

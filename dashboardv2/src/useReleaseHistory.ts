@@ -239,7 +239,7 @@ export function useReleaseHistoryWithDispatch(
 ) {
 	const client = useClient();
 	const [{ pagesMap }, localDispatch] = React.useReducer(reducer, initialState());
-	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch, false);
 	if (scaleReqModifiers.length === 0) {
 		scaleReqModifiers = emptyScaleReqModifiersArray;
 	}

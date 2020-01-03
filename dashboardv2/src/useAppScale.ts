@@ -99,7 +99,7 @@ export function reducer(prevState: State, actions: Action | Action[]): State {
 export function useAppScaleWithDispatch(appName: string, callerDispatch: Dispatcher) {
 	const client = useClient();
 	const [{ releaseName }, localDispatch] = React.useReducer(reducer, initialState());
-	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch, false);
 	useAppWithDispatch(appName, dispatch);
 	React.useEffect(
 		() => {

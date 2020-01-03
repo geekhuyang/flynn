@@ -73,7 +73,7 @@ export function reducer(prevState: State, actions: Action | Action[]): State {
 export function useAppReleaseWithDispatch(appName: string, callerDispatch: Dispatcher) {
 	const client = useClient();
 	const [, localDispatch] = React.useReducer(reducer, initialState());
-	const dispatch = useMergeDispatch(localDispatch, callerDispatch);
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch, false);
 	React.useEffect(
 		() => {
 			const cancel = client.streamDeployments(

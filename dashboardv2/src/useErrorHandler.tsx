@@ -82,9 +82,20 @@ export enum ErrorHandlerOption {
 }
 
 let debugIndex = 0;
+export function handleErrorFactory(): ErrorHandler {
+	const key = Symbol(`useErrorHandler key(${debugIndex++})`);
+	return Object.assign(
+		(error: Error) => {
+			handleError(error, key);
+		},
+		{ key }
+	);
+}
+
 export default function useErrorHandler(..._opts: ErrorHandlerOption[]): ErrorHandler {
 	const [opts] = React.useState(new Set(_opts));
-	const [key] = React.useState(() => Symbol(`useErrorHandler key(${debugIndex++})`));
+	const fn = React.useMemo(() => handleErrorFactory(), []);
+	const key = fn.key;
 	React.useEffect(
 		() => {
 			if (opts.has(ErrorHandlerOption.PERSIST_AFTER_UNMOUNT)) return;
@@ -98,13 +109,5 @@ export default function useErrorHandler(..._opts: ErrorHandlerOption[]): ErrorHa
 		},
 		[key, opts]
 	);
-	return React.useCallback(
-		Object.assign(
-			(error: Error) => {
-				handleError(error, key);
-			},
-			{ key }
-		),
-		[key]
-	);
+	return fn;
 }

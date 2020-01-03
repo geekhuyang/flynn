@@ -36,7 +36,10 @@ import CreateDeployment, {
 	Action as CreateDeploymentAction,
 	ActionType as CreateDeploymentActionType
 } from './CreateDeployment';
-import CreateScaleRequestComponent from './CreateScaleRequest';
+import CreateScaleRequestComponent, {
+	ActionType as CreateScaleRequestActionType,
+	Action as CreateScaleRequestAction
+} from './CreateScaleRequest';
 import ReleaseComponent from './Release';
 import WindowedListState from './WindowedListState';
 import WindowedList, { WindowedListItem } from './WindowedList';
@@ -100,6 +103,7 @@ type Action =
 	| AppAction
 	| AppScaleAction
 	| ReleaseHistoryAction
+	| CreateScaleRequestAction
 	| CreateDeploymentAction;
 
 interface State {
@@ -125,6 +129,9 @@ interface State {
 
 	// useReleaseHistory
 	releaseHistoryState: ReleaseHistoryState;
+
+	// <CreateScaleRequest>
+	createScaleRequestError: Error | null;
 
 	// <CreateDeployment>
 	createDeploymentError: Error | null;
@@ -157,6 +164,9 @@ function initialState(): State {
 
 		// useReleaseHistory
 		releaseHistoryState: initialReleaseHistoryState(),
+
+		// <CreateScaleRequest>
+		createScaleRequestError: null,
 
 		// <CreateDeployment>
 		createDeploymentError: null
@@ -231,6 +241,26 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 				nextState.currentScaleLoading = action.loading;
 				return nextState;
 			// useAppScale END
+			//
+			// <CreateScaleRequestComponent> START
+			case CreateScaleRequestActionType.SET_ERROR:
+				nextState.createScaleRequestError = action.error;
+				return nextState;
+
+			case CreateScaleRequestActionType.CANCEL:
+				return reducer(prevState, [
+					{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
+					{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
+					{ type: ActionType.SET_NEXT_SCALE, scale: null }
+				]);
+
+			case CreateScaleRequestActionType.CREATED:
+				return reducer(prevState, [
+					{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
+					{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
+					{ type: ActionType.SET_NEXT_SCALE, scale: null }
+				]);
+			// <CreateScaleRequestComponent> END
 
 			// <CreateDeployment> START
 			case CreateDeploymentActionType.SET_ERROR:
@@ -693,14 +723,6 @@ function ReleaseHistory({ appName }: Props) {
 		]);
 	};
 
-	const handleDeployComplete = () => {
-		dispatch([
-			{ type: ActionType.SET_DEPLOY_STATUS, isDeploying: false },
-			{ type: ActionType.SET_NEXT_RELEASE_NAME, name: '' },
-			{ type: ActionType.SET_NEXT_SCALE, scale: null }
-		]);
-	};
-
 	const paddingTopRef = React.useRef<HTMLElement>();
 	const paddingBottomRef = React.useRef<HTMLElement>();
 
@@ -781,13 +803,7 @@ function ReleaseHistory({ appName }: Props) {
 					nextReleaseName &&
 					nextReleaseName === currentReleaseName &&
 					nextScale ? (
-						<CreateScaleRequestComponent
-							appName={appName}
-							nextScale={nextScale}
-							onCancel={handleDeployCancel}
-							onCreate={handleDeployComplete}
-							handleError={handleError}
-						/>
+						<CreateScaleRequestComponent appName={appName} nextScale={nextScale} dispatch={dispatch} />
 					) : (
 						<CreateDeployment
 							appName={appName}

@@ -3,7 +3,15 @@ import { Github as GithubIcon } from 'grommet-icons';
 import { Heading, Accordion, AccordionPanel } from 'grommet';
 
 import { isNotFoundError } from './client';
-import useApp from './useApp';
+import {
+	useAppWithDispatch,
+	ActionType as AppActionType,
+	Action as AppAction,
+	State as AppState,
+	initialState as initialAppState,
+	reducer as appReducer
+} from './useApp';
+import isActionType from './util/isActionType';
 import useRouter from './useRouter';
 import { NavProtectionContext, buildNavProtectionContext } from './useNavProtection';
 
@@ -11,10 +19,86 @@ import { default as useErrorHandler, ErrorHandlerOption } from './useErrorHandle
 import Notification from './Notification';
 import Loading from './Loading';
 import ExternalAnchor from './ExternalAnchor';
+import { ActionType as FormationActionType, Action as FormationAction } from './FormationEditor';
 const FormationEditor = React.lazy(() => import('./FormationEditor'));
 const ReleaseHistory = React.lazy(() => import('./ReleaseHistory'));
 const EnvEditor = React.lazy(() => import('./EnvEditor'));
 const MetadataEditor = React.lazy(() => import('./MetadataEditor'));
+
+export enum ActionType {}
+
+export type Action = AppAction | FormationAction;
+
+type Dispatcher = (actions: Action | Action[]) => void;
+
+interface State {
+	// useApp
+	appState: AppState;
+
+	// <FormationEditor>
+	formationEditorError: Error | null;
+
+	isAppDeleted: boolean;
+	githubURL: string | null;
+}
+
+function initialState(props: Props): State {
+	return {
+		// useApp
+		appState: initialAppState(),
+
+		// <FormationEditor>
+		formationEditorError: null,
+
+		isAppDeleted: false,
+		githubURL: null
+	};
+}
+
+type Reducer = (prevState: State, actions: Action | Action[]) => State;
+
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
+	}
+	const nextState = actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case FormationActionType.SET_ERROR:
+				nextState.formationEditorError = action.error;
+				return nextState;
+
+			default:
+				if (isActionType<AppAction>(AppActionType, action)) {
+					nextState.appState = appReducer(prevState.appState, action);
+					return nextState;
+				}
+
+				return prevState;
+		}
+	}, prevState);
+
+	if (nextState === prevState) return prevState;
+
+	(() => {
+		const {
+			appState: { app }
+		} = nextState;
+		nextState.isAppDeleted = !!(app && !!app.getDeleteTime());
+	})();
+
+	nextState.githubURL = (() => {
+		const {
+			appState: { app }
+		} = nextState;
+		if (!app) {
+			return null;
+		}
+		return app.getLabelsMap().get('github.url') || null;
+	})();
+
+	return nextState;
+}
 
 export interface Props {
 	name: string;
@@ -35,11 +119,22 @@ export interface Props {
  *	<AppComponent name="apps/70f9e916-5612-4634-b6f1-2df75c1dd5de" />
  *
  */
-export default function AppComponent({ name }: Props) {
+export default function AppComponent(props: Props) {
+	const { name } = props;
 	const handleError = useErrorHandler(ErrorHandlerOption.PERSIST_AFTER_UNMOUNT);
+
 	// Stream app
-	const { app, loading: appLoading, error: appError } = useApp(name);
-	const isAppDeleted = app && !!app.getDeleteTime();
+	const [
+		{
+			appState: { app, loading: appLoading, error: appError },
+			isAppDeleted,
+			githubURL,
+			formationEditorError
+		},
+		dispatch
+	] = React.useReducer(reducer, initialState(props));
+	useAppWithDispatch(name, dispatch);
+
 	React.useEffect(
 		() => {
 			if (appError) {
@@ -50,20 +145,14 @@ export default function AppComponent({ name }: Props) {
 					handleError(new Error(`${app ? app.getDisplayName() : 'App(' + name + ')'}: ${appError.message}`));
 				}
 			}
+
+			if (formationEditorError) {
+				handleError(formationEditorError);
+			}
 		},
-		[appError] // eslint-disable-line react-hooks/exhaustive-deps
+		[appError, formationEditorError] // eslint-disable-line react-hooks/exhaustive-deps
 	);
 	React.useDebugValue(`App(${app ? name : 'null'})${appLoading ? ' (Loading)' : ''}`);
-
-	const githubURL = React.useMemo<string | null>(
-		() => {
-			if (!app) {
-				return null;
-			}
-			return app.getLabelsMap().get('github.url') || null;
-		},
-		[app]
-	);
 
 	const { history, location, urlParams } = useRouter();
 
@@ -71,7 +160,7 @@ export default function AppComponent({ name }: Props) {
 	const panels = app
 		? [
 				<AppComponentPanel key="scale" label="Scale" index={panelIndex++} defaultActive={true}>
-					<FormationEditor appName={app.getName()} />
+					<FormationEditor appName={app.getName()} dispatch={dispatch} />
 				</AppComponentPanel>,
 
 				<AppComponentPanel key="env" label="Environment Variables" index={panelIndex++} defaultActive={true}>
