@@ -46,19 +46,63 @@ export type Action =
 
 type Dispatcher = (actions: Action | Action[]) => void;
 
+function buildProcessesFullDiff(
+	scale: ScaleRequest,
+	nextScale: CreateScaleRequest,
+	release: Release | null
+): Diff<string, number> {
+	return protoMapDiff(
+		buildProcessesMap((scale || new ScaleRequest()).getNewProcessesMap(), release),
+		buildProcessesMap(nextScale.getProcessesMap(), release),
+		DiffOption.INCLUDE_UNCHANGED,
+		DiffOption.NO_DUPLICATE_KEYS
+	);
+}
+
+function buildScaleToZeroConfirmationRequired(processesFullDiff: Diff<string, number>): Set<string> {
+	const keys = new Set<string>();
+	processesFullDiff.forEach((op) => {
+		if (op.op === 'remove' || op.value === 0) {
+			keys.add(op.key);
+		}
+	});
+	return keys;
+}
+
+function buildScaleToZeroConfirmed(): Map<string, boolean> {
+	return new Map<string, boolean>();
+}
+
+function buildIsScaleToZeroConfirmed(
+	scaleToZeroConfirmationRequired: Set<string>,
+	scaleToZeroConfirmed: Map<string, boolean>
+): boolean {
+	let isConfirmed = true;
+	for (let k of scaleToZeroConfirmationRequired) {
+		if (scaleToZeroConfirmed.get(k) !== true) {
+			isConfirmed = false;
+		}
+	}
+	return isConfirmed;
+}
+
 interface State extends StateProps {
 	scaleToZeroConfirmationRequired: Set<string>;
-	isScaleToZeroConfirmed: boolean | null;
+	isScaleToZeroConfirmed: boolean;
 	scaleToZeroConfirmed: Map<string, boolean>;
 	processesFullDiff: Diff<string, number>;
 }
 
 function initialState({ scale, nextScale, release, confirmScaleToZero = true }: StateProps): State {
+	const processesFullDiff = buildProcessesFullDiff(scale, nextScale, release);
+	const scaleToZeroConfirmationRequired = buildScaleToZeroConfirmationRequired(processesFullDiff);
+	const scaleToZeroConfirmed = buildScaleToZeroConfirmed();
+	const isScaleToZeroConfirmed = buildIsScaleToZeroConfirmed(scaleToZeroConfirmationRequired, scaleToZeroConfirmed);
 	return {
-		scaleToZeroConfirmationRequired: new Set<string>(),
-		isScaleToZeroConfirmed: null,
-		scaleToZeroConfirmed: new Map<string, boolean>([]),
-		processesFullDiff: [],
+		scaleToZeroConfirmationRequired,
+		isScaleToZeroConfirmed,
+		scaleToZeroConfirmed,
+		processesFullDiff,
 
 		scale,
 		nextScale,
@@ -97,27 +141,16 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 		const { scale, nextScale, release } = nextState;
 		if (scale === prevState.scale && nextScale === prevState.nextScale && release === prevState.release) return;
 
-		nextState.processesFullDiff = protoMapDiff(
-			buildProcessesMap((scale || new ScaleRequest()).getNewProcessesMap(), release),
-			buildProcessesMap(nextScale.getProcessesMap(), release),
-			DiffOption.INCLUDE_UNCHANGED,
-			DiffOption.NO_DUPLICATE_KEYS
-		);
+		nextState.processesFullDiff = buildProcessesFullDiff(scale, nextScale, release);
 	})();
 
 	(() => {
-		const keys = new Set<string>();
 		const { confirmScaleToZero, processesFullDiff } = nextState;
 		if (confirmScaleToZero === prevState.confirmScaleToZero && processesFullDiff === prevState.processesFullDiff)
 			return;
 		if (!confirmScaleToZero) return;
 
-		processesFullDiff.forEach((op) => {
-			if (op.op === 'remove' || op.value === 0) {
-				keys.add(op.key);
-			}
-		});
-		nextState.scaleToZeroConfirmationRequired = keys;
+		nextState.scaleToZeroConfirmationRequired = buildScaleToZeroConfirmationRequired(processesFullDiff);
 	})();
 
 	(() => {
@@ -128,13 +161,10 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 		)
 			return;
 
-		let isConfirmed = true;
-		for (let k of scaleToZeroConfirmationRequired) {
-			if (scaleToZeroConfirmed.get(k) !== true) {
-				isConfirmed = false;
-			}
-		}
-		nextState.isScaleToZeroConfirmed = isConfirmed;
+		nextState.isScaleToZeroConfirmed = buildIsScaleToZeroConfirmed(
+			scaleToZeroConfirmationRequired,
+			scaleToZeroConfirmed
+		);
 	})();
 
 	return nextState;

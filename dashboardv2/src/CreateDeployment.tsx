@@ -38,7 +38,6 @@ import ProcessesDiff, { ActionType as ProcessesDiffActionType, Action as Process
 export enum ActionType {
 	SET_CREATING = 'CreateDeployment__SET_CREATING',
 	SET_ERROR = 'CreateDeployment__SET_ERROR',
-	SET_SCALE_TO_ZERO_CONFIRMED = 'CreateDeployment__SET_SCALE_TO_ZERO_CONFIRMED',
 	CANCEL = 'CreateDeployment__CANCEL',
 	CREATED = 'CreateDeployment__CREATED'
 }
@@ -53,11 +52,6 @@ interface SetErrorAction {
 	error: Error;
 }
 
-interface SetScaleToZeroConfirmedAction {
-	type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED;
-	confirmed: boolean;
-}
-
 interface CancelAction {
 	type: ActionType.CANCEL;
 }
@@ -67,7 +61,6 @@ interface CreatedAction {
 }
 
 export type Action =
-	| SetScaleToZeroConfirmedAction
 	| SetCreatingAction
 	| SetErrorAction
 	| AppReleaseAction
@@ -105,7 +98,7 @@ function initialState(props: Props): State {
 		nextReleaseState: initialReleaseState(),
 
 		isCreating: false,
-		isScaleToZeroConfirmed: !props.newScale
+		isScaleToZeroConfirmed: false
 	};
 }
 
@@ -282,6 +275,7 @@ export default function CreateDeployment(props: Props) {
 						nextScale={newScale}
 						release={currentRelease}
 						dispatch={dispatch}
+						confirmScaleToZero
 					/>
 				) : null}
 			</Box>
