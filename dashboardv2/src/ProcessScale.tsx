@@ -1,11 +1,11 @@
 import * as React from 'react';
-import { debounce } from 'lodash';
 import styled from 'styled-components';
 import { LinkUp as LinkUpIcon, LinkDown as LinkDownIcon } from 'grommet-icons';
 import { Text, Box, BoxProps, Button, CheckBox } from 'grommet';
+import useMergeDispatch from './useMergeDispatch';
 import ifDev from './ifDev';
 
-export const valueCSS = (size: string) => `
+const valueCSS = (size: string) => `
 	font-size: ${size === 'xsmall' ? '1em' : size === 'small' ? '2em' : '4em'};
 	min-width: 1.2em;
 	text-align: center;
@@ -26,15 +26,114 @@ const ValueInput = styled.input`
 	${(props: ValueInputProps) => valueCSS(props.fontSize)};
 `;
 
-export const ValueText = styled(Text)`
+const ValueText = styled(Text)`
 	${(props) => valueCSS(props.size as string)};
 `;
 
-export const LabelText = styled(Text)`
+const LabelText = styled(Text)`
 	font-size: ${(props) => (props.size === 'xsmall' ? '0.75em' : props.size === 'small' ? '1em' : '1.5em')};
 	line-height: 1.5em;
 	margin: 0 0.5em;
 `;
+
+export enum ActionType {
+	SET_VALUE = 'ProcessScale__SET_VALUE',
+	SET_VALUE_EDITABLE = 'ProcessScale__SET_VALUE_EDITABLE',
+	INCREMENT_VALUE = 'ProcessScale__INCREMENT_VALUE',
+	DECREMENT_VALUE = 'ProcessScale__DECREMENT_VALUE',
+	CONFIRM_SCALE_TO_ZERO = 'ProcessScale__CONFIRM_SCALE_TO_ZERO',
+	UNCONFIRM_SCALE_TO_ZERO = 'ProcessScale__UNCONFIRM_SCALE_TO_ZERO'
+}
+
+interface SetValueAction {
+	type: ActionType.SET_VALUE;
+	value: number;
+}
+
+interface SetValueEditableAction {
+	type: ActionType.SET_VALUE_EDITABLE;
+	editable: boolean;
+}
+
+interface IncrementValueAction {
+	type: ActionType.INCREMENT_VALUE;
+}
+
+interface DecrementValueAction {
+	type: ActionType.DECREMENT_VALUE;
+}
+
+interface ConfirmScaleToZeroAction {
+	type: ActionType.CONFIRM_SCALE_TO_ZERO;
+}
+
+interface UnconfirmScaleToZeroAction {
+	type: ActionType.UNCONFIRM_SCALE_TO_ZERO;
+}
+
+export type Action =
+	| SetValueAction
+	| SetValueEditableAction
+	| IncrementValueAction
+	| DecrementValueAction
+	| ConfirmScaleToZeroAction
+	| UnconfirmScaleToZeroAction;
+
+type Dispatcher = (actions: Action | Action[]) => void;
+
+interface State {
+	value: number;
+	valueEditable: boolean;
+}
+
+function initialState(props: Props): State {
+	return {
+		value: props.value,
+		valueEditable: false
+	};
+}
+
+type Reducer = (prevState: State, actions: Action | Action[]) => State;
+
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
+	}
+	const nextState = actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case ActionType.SET_VALUE:
+				nextState.value = action.value;
+				return nextState;
+
+			case ActionType.SET_VALUE_EDITABLE:
+				nextState.valueEditable = action.editable;
+				return nextState;
+
+			case ActionType.INCREMENT_VALUE:
+				nextState.value = prevState.value + 1;
+				return nextState;
+
+			case ActionType.DECREMENT_VALUE:
+				nextState.value = prevState.value - 1;
+				if (nextState.value < 0) return prevState;
+				return nextState;
+
+			case ActionType.CONFIRM_SCALE_TO_ZERO:
+				return prevState;
+
+			case ActionType.UNCONFIRM_SCALE_TO_ZERO:
+				return prevState;
+
+			default:
+				return prevState;
+		}
+	}, prevState);
+
+	if (nextState === prevState) return prevState;
+
+	return nextState;
+}
 
 export interface Props extends BoxProps {
 	value: number;
@@ -43,11 +142,10 @@ export interface Props extends BoxProps {
 	showLabelDelta?: boolean;
 	label: string;
 	size?: 'xsmall' | 'small' | 'large';
-	editable?: boolean;
-	onChange?: (value: number) => void;
-	onConfirmChange?: (scaleToZeroConfirmed: boolean) => void;
+	mutable?: boolean;
 	confirmScaleToZero?: boolean;
 	scaleToZeroConfirmed?: boolean;
+	dispatch: Dispatcher;
 }
 
 /*
@@ -61,9 +159,11 @@ export interface Props extends BoxProps {
  *	<ProcessScale size="small" value={3} label="web" />
  *
  * Example:
- *	<ProcessScale value={3} label="web" editable onChange={(newValue) => { do something with newValue }} />
+ *	<ProcessScale value={3} label="web" mutable dispatch={dispatch} />
+ *	See `ActionType` for list of action types.
+ *	Caller is expected to implement `CONFIRM_SCALE_TO_ZERO` and `UNCONFIRM_SCALE_TO_ZERO`
+ *  Watch `SET_VALUE`, `INCREMENT`, and `DECREMENT` to get changes in value
  */
-const emptyCallback = () => {};
 const ProcessScale = React.memo(function ProcessScale({
 	value: initialValue,
 	originalValue = 0,
@@ -71,14 +171,14 @@ const ProcessScale = React.memo(function ProcessScale({
 	showLabelDelta = false,
 	label,
 	size = 'small',
-	editable = false,
-	onChange = emptyCallback,
-	onConfirmChange = emptyCallback,
+	mutable = false,
 	confirmScaleToZero = false,
 	scaleToZeroConfirmed = false,
+	dispatch: callerDispatch,
 	...boxProps
 }: Props) {
-	const [value, setValue] = React.useState(initialValue);
+	const [{ value, valueEditable }, localDispatch] = React.useReducer(reducer, initialState(arguments[0]));
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch, false);
 
 	const delta = React.useMemo(() => value - originalValue, [originalValue, value]);
 	const deltaText = React.useMemo(
@@ -92,38 +192,16 @@ const ProcessScale = React.memo(function ProcessScale({
 		[delta]
 	);
 
-	// Handle rapid changes as single change
-	const onChangeDebounced = React.useMemo(
-		() => {
-			return debounce(onChange, 100);
-		},
-		[onChange]
-	);
-
-	// Send changes upstream via onChange() prop when value changes
-	React.useEffect(
-		() => {
-			if (value !== initialValue) {
-				onChangeDebounced.cancel();
-				onChangeDebounced(value);
-			}
-		},
-		[onChangeDebounced, value, initialValue]
-	);
-
 	// Handle incoming changes to props.value
 	React.useEffect(
 		() => {
-			onChangeDebounced.cancel();
-			setValue(initialValue);
+			dispatch({ type: ActionType.SET_VALUE, value: initialValue });
 		},
-		[initialValue, onChangeDebounced]
+		[initialValue, dispatch]
 	);
 
-	const [valueEditable, setValueEditable] = React.useState(false);
-	const valueInput = React.useRef(null) as React.RefObject<HTMLInputElement>;
-
 	// Focus input when valueEditable enabled
+	const valueInput = React.useRef(null) as React.RefObject<HTMLInputElement>;
 	React.useLayoutEffect(
 		() => {
 			if (valueEditable && valueInput.current) {
@@ -133,13 +211,54 @@ const ProcessScale = React.memo(function ProcessScale({
 		[valueEditable, valueInput]
 	);
 
-	const handleIncrement = (prevValue: number) => {
-		return prevValue + 1;
-	};
+	const handleIncrement = React.useCallback(
+		(e: React.SyntheticEvent) => {
+			e.preventDefault();
+			dispatch({ type: ActionType.INCREMENT_VALUE });
+		},
+		[dispatch]
+	);
 
-	const handleDecrement = (prevValue: number) => {
-		return Math.max(prevValue - 1, 0);
-	};
+	const handleDecrement = React.useCallback(
+		(e: React.SyntheticEvent) => {
+			e.preventDefault();
+			dispatch({ type: ActionType.DECREMENT_VALUE });
+		},
+		[dispatch]
+	);
+
+	const handleChange = React.useCallback(
+		(e: React.ChangeEvent<HTMLInputElement>) => {
+			dispatch({ type: ActionType.SET_VALUE, value: Math.max(parseInt(e.target.value, 10) || 0, 0) });
+		},
+		[dispatch]
+	);
+
+	const handleConfirmChange = React.useCallback(
+		(e: React.ChangeEvent<HTMLInputElement>) => {
+			if (e.target.checked) {
+				dispatch({ type: ActionType.CONFIRM_SCALE_TO_ZERO });
+			} else {
+				dispatch({ type: ActionType.UNCONFIRM_SCALE_TO_ZERO });
+			}
+		},
+		[dispatch]
+	);
+
+	const handleValueTextClick = React.useCallback(
+		() => {
+			if (!mutable) return;
+			dispatch({ type: ActionType.SET_VALUE_EDITABLE, editable: true });
+		},
+		[mutable, dispatch]
+	);
+
+	const handleValueInputBlur = React.useCallback(
+		() => {
+			dispatch({ type: ActionType.SET_VALUE_EDITABLE, editable: false });
+		},
+		[dispatch]
+	);
 
 	return (
 		<Box
@@ -160,36 +279,31 @@ const ProcessScale = React.memo(function ProcessScale({
 					<ValueInput
 						ref={valueInput}
 						fontSize={size}
-						onBlur={() => setValueEditable(false)}
-						onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-							setValue(Math.max(parseInt(e.target.value, 10) || 0, 0))
-						}
+						onBlur={handleValueInputBlur}
+						onChange={handleChange}
 						value={value}
 					/>
 				) : showDelta ? (
 					<Box direction="row" justify="center" align="center">
 						<Box justify="center">{delta > 0 ? <LinkUpIcon /> : delta < 0 ? <LinkDownIcon /> : null}</Box>
-						<ValueText size={size} onClick={() => (editable ? setValueEditable(true) : void 0)}>
+						<ValueText size={size} onClick={handleValueTextClick}>
 							{value}
 						</ValueText>
 					</Box>
 				) : (
-					<ValueText size={size} onClick={() => (editable ? setValueEditable(true) : void 0)}>
+					<ValueText size={size} onClick={handleValueTextClick}>
 						{value}
 					</ValueText>
 				)}
-				{editable ? (
+				{mutable ? (
 					<Box>
-						<Button margin="xsmall" plain icon={<LinkUpIcon />} onClick={() => setValue(handleIncrement)} />
-						<Button margin="xsmall" plain icon={<LinkDownIcon />} onClick={() => setValue(handleDecrement)} />
+						<Button margin="xsmall" plain icon={<LinkUpIcon />} onClick={handleIncrement} />
+						<Button margin="xsmall" plain icon={<LinkDownIcon />} onClick={handleDecrement} />
 					</Box>
 				) : null}
 				{confirmScaleToZero && value === 0 && delta !== 0 ? (
 					<Box margin={{ right: 'xsmall' }}>
-						<CheckBox
-							checked={scaleToZeroConfirmed}
-							onChange={(e: React.ChangeEvent<HTMLInputElement>) => onConfirmChange(e.target.checked)}
-						/>
+						<CheckBox checked={scaleToZeroConfirmed} onChange={handleConfirmChange} />
 					</Box>
 				) : null}
 			</Box>

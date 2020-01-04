@@ -106,6 +106,8 @@ type Action =
 	| CreateScaleRequestAction
 	| CreateDeploymentAction;
 
+type Dispatcher = (actions: Action | Action[]) => void;
+
 interface State {
 	isDeploying: boolean;
 	selectedItemName: string;
@@ -485,24 +487,42 @@ interface ReleaseHistoryScaleProps extends BoxProps {
 	selected: boolean;
 	isCurrent: boolean;
 	scaleRequest: ScaleRequest;
-	onChange: (isSelected: boolean) => void;
+	currentReleaseName: string;
+	dispatch: Dispatcher;
 }
 
 const ReleaseHistoryScale = React.memo(
 	React.forwardRef(function ReleaseHistoryScale(
-		{ scaleRequest: s, selected, isCurrent, onChange, ...boxProps }: ReleaseHistoryScaleProps,
+		{ scaleRequest: s, selected, isCurrent, currentReleaseName, dispatch, ...boxProps }: ReleaseHistoryScaleProps,
 		ref: any
 	) {
 		const releaseID = s.getParent().split('/')[3];
 		const diff = protoMapDiff(s.getOldProcessesMap(), s.getNewProcessesMap(), DiffOption.INCLUDE_UNCHANGED);
+
+		const handleChange = React.useCallback(
+			(e: React.ChangeEvent<HTMLInputElement>) => {
+				const isSelected = e.target.checked;
+				if (isSelected) {
+					dispatch({
+						type: ActionType.SET_SELECTED_ITEM,
+						name: s.getName(),
+						resourceType: SelectedResourceType.ScaleRequest
+					});
+				} else {
+					dispatch({
+						type: ActionType.SET_SELECTED_ITEM,
+						name: currentReleaseName,
+						resourceType: SelectedResourceType.Release
+					});
+				}
+			},
+			[s, currentReleaseName, dispatch]
+		);
+
 		return (
 			<SelectableBox ref={ref} selected={selected} highlighted={isCurrent} {...boxProps}>
 				<label>
-					<CheckBox
-						checked={selected}
-						indeterminate={!selected && isCurrent}
-						onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)}
-					/>
+					<CheckBox checked={selected} indeterminate={!selected && isCurrent} onChange={handleChange} />
 					<div>
 						<div>Release {releaseID}</div>
 						<div>
@@ -541,6 +561,7 @@ const ReleaseHistoryScale = React.memo(
 											originalValue={prevVal}
 											showDelta
 											label={op.key}
+											dispatch={dispatch}
 										/>
 									);
 									return m;
@@ -879,23 +900,10 @@ function ReleaseHistory({ appName }: Props) {
 												flex={false}
 												margin={{ bottom: 'small' }}
 												scaleRequest={s}
+												currentReleaseName={currentReleaseName}
 												selected={selectedItemName === s.getName()}
 												isCurrent={currentScale ? currentScale.getName() === s.getName() : false}
-												onChange={(isSelected) => {
-													if (isSelected) {
-														dispatch({
-															type: ActionType.SET_SELECTED_ITEM,
-															name: s.getName(),
-															resourceType: SelectedResourceType.ScaleRequest
-														});
-													} else {
-														dispatch({
-															type: ActionType.SET_SELECTED_ITEM,
-															name: currentReleaseName,
-															resourceType: SelectedResourceType.Release
-														});
-													}
-												}}
+												dispatch={dispatch}
 											/>
 										)}
 									</WindowedListItem>

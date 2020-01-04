@@ -33,7 +33,7 @@ import isActionType from './util/isActionType';
 import useWithCancel from './useWithCancel';
 import Loading from './Loading';
 import ReleaseComponent from './Release';
-import ProcessesDiff from './ProcessesDiff';
+import ProcessesDiff, { ActionType as ProcessesDiffActionType, Action as ProcessesDiffAction } from './ProcessesDiff';
 
 export enum ActionType {
 	SET_CREATING = 'CreateDeployment__SET_CREATING',
@@ -74,7 +74,8 @@ export type Action =
 	| AppScaleAction
 	| ReleaseAction
 	| CancelAction
-	| CreatedAction;
+	| CreatedAction
+	| ProcessesDiffAction;
 
 type Dispatcher = (actions: Action | Action[]) => void;
 
@@ -125,8 +126,12 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 				// no-op, parent component is expected to handle this
 				return prevState;
 
-			case ActionType.SET_SCALE_TO_ZERO_CONFIRMED:
-				nextState.isScaleToZeroConfirmed = action.confirmed;
+			case ProcessesDiffActionType.SCALE_TO_ZERO_CONFIRMED:
+				nextState.isScaleToZeroConfirmed = true;
+				return nextState;
+
+			case ProcessesDiffActionType.SCALE_TO_ZERO_UNCONFIRMED:
+				nextState.isScaleToZeroConfirmed = false;
 				return nextState;
 
 			default:
@@ -276,9 +281,7 @@ export default function CreateDeployment(props: Props) {
 						scale={currentScale}
 						nextScale={newScale}
 						release={currentRelease}
-						onConfirmScaleToZeroChange={(confirmed) =>
-							dispatch({ type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED, confirmed })
-						}
+						dispatch={dispatch}
 					/>
 				) : null}
 			</Box>

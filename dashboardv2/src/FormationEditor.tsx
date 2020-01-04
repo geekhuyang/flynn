@@ -29,7 +29,11 @@ import CreateScaleRequestComponent, {
 	Action as CreateScaleRequestAction,
 	ActionType as CreateScaleRequestActionType
 } from './CreateScaleRequest';
-import ProcessScale from './ProcessScale';
+import ProcessScale, {
+	ActionType as ProcessScaleActionType,
+	Action as ProcessScaleAction,
+	Props as ProcessScaleProps
+} from './ProcessScale';
 import protoMapDiff, { applyProtoMapDiff, Diff } from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
 import buildProcessesMap from './util/buildProcessesMap';
@@ -38,6 +42,8 @@ import { ScaleRequest, ScaleRequestState, CreateScaleRequest } from './generated
 export enum ActionType {
 	SET_PROCESSES = 'FormationEditor__SET_PROCESSES',
 	PROCESS_CHANGE = 'FormationEditor__PROCESS_CHANGE',
+	INCREMENT_PROCESS = 'FormationEditor__INCREMENT_PROCESS',
+	DECREMENT_PROCESS = 'FormationEditor__DECREMENT_PROCESS',
 	RESET = 'FormationEditor__RESET',
 	SET_CONFIRMING = 'FormationEditor__SET_CONFIRMING',
 	SET_ERROR = 'FormationEditor__SET_ERROR'
@@ -52,6 +58,16 @@ interface ProcessChangeAction {
 	type: ActionType.PROCESS_CHANGE;
 	key: string;
 	val: number;
+}
+
+interface IncrementProcessAction {
+	type: ActionType.INCREMENT_PROCESS;
+	key: string;
+}
+
+interface DecrementProcessAction {
+	type: ActionType.DECREMENT_PROCESS;
+	key: string;
 }
 
 interface ResetAction {
@@ -71,12 +87,15 @@ interface SetErrorAction {
 export type Action =
 	| SetProcessesAction
 	| ProcessChangeAction
+	| IncrementProcessAction
+	| DecrementProcessAction
 	| ResetAction
 	| SetConfirmingAction
 	| SetErrorAction
 	| AppReleaseAction
 	| AppScaleAction
-	| CreateScaleRequestAction;
+	| CreateScaleRequestAction
+	| ProcessScaleAction;
 
 type Dispatcher = (actions: Action | Action[]) => void;
 
@@ -138,6 +157,33 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 					}
 					return [k, v];
 				}) as [string, number][];
+
+				return nextState;
+
+			case ActionType.INCREMENT_PROCESS:
+				nextState.processes = prevState.processes.map(([k, v]: [string, number]) => {
+					if (k === action.key) {
+						return [k, v + 1];
+					}
+					return [k, v];
+				}) as [string, number][];
+
+				return nextState;
+
+			case ActionType.DECREMENT_PROCESS:
+				let changed = false;
+				nextState.processes = prevState.processes.map(([k, v]: [string, number]) => {
+					if (k === action.key) {
+						const nextValue = Math.max(v - 1, 0);
+						if (nextValue !== v) {
+							changed = true;
+						}
+						return [k, nextValue];
+					}
+					return [k, v];
+				}) as [string, number][];
+
+				if (!changed) return prevState;
 
 				return nextState;
 
@@ -353,14 +399,7 @@ export default function FormationEditor(props: Props) {
 					) : (
 						processes.map(([key, val]: [string, number]) => (
 							<Box margin={{ bottom: 'xsmall' }} align="center" key={key}>
-								<ProcessScale
-									value={val}
-									label={key}
-									editable
-									onChange={(newVal) => {
-										dispatch({ type: ActionType.PROCESS_CHANGE, key, val: newVal });
-									}}
-								/>
+								<WrappedProcessScale processesKey={key} value={val} label={key} mutable dispatch={dispatch} />
 							</Box>
 						))
 					)}
@@ -387,3 +426,41 @@ export default function FormationEditor(props: Props) {
 		</>
 	);
 }
+
+interface WrappedProcessScaleProps extends ProcessScaleProps {
+	processesKey: string;
+	dispatch: Dispatcher;
+}
+
+const WrappedProcessScale = ({ processesKey: key, dispatch: parentDispatch, ...props }: WrappedProcessScaleProps) => {
+	const dispatch = React.useCallback(
+		(actions: Action | Action[]) => {
+			if (!Array.isArray(actions)) actions = [actions];
+			actions.forEach((action: Action) => {
+				switch (action.type) {
+					case ProcessScaleActionType.SET_VALUE:
+						parentDispatch({
+							type: ActionType.PROCESS_CHANGE,
+							key,
+							val: action.value
+						});
+						break;
+					case ProcessScaleActionType.INCREMENT_VALUE:
+						parentDispatch({
+							type: ActionType.INCREMENT_PROCESS,
+							key
+						});
+						break;
+					case ProcessScaleActionType.DECREMENT_VALUE:
+						parentDispatch({
+							type: ActionType.DECREMENT_PROCESS,
+							key
+						});
+						break;
+				}
+			});
+		},
+		[key, parentDispatch]
+	);
+	return <ProcessScale dispatch={dispatch} {...props} />;
+};

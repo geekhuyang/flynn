@@ -23,7 +23,7 @@ import {
 import isActionType from './util/isActionType';
 import useWithCancel from './useWithCancel';
 import Loading from './Loading';
-import ProcessesDiff from './ProcessesDiff';
+import ProcessesDiff, { ActionType as ProcessesDiffActionType, Action as ProcessesDiffAction } from './ProcessesDiff';
 import protoMapDiff from './util/protoMapDiff';
 import protoMapReplace from './util/protoMapReplace';
 import buildProcessesMap from './util/buildProcessesMap';
@@ -75,7 +75,8 @@ export type Action =
 	| AppReleaseAction
 	| AppScaleAction
 	| CancelAction
-	| CreatedAction;
+	| CreatedAction
+	| ProcessesDiffAction;
 
 type Dispatcher = (actions: Action | Action[]) => void;
 
@@ -128,8 +129,12 @@ function reducer(prevState: State, actions: Action | Action[]): State {
 				// no-op, parent component is expected to handle this
 				return prevState;
 
-			case ActionType.SET_SCALE_TO_ZERO_CONFIRMED:
-				nextState.isScaleToZeroConfirmed = action.confirmed;
+			case ProcessesDiffActionType.SCALE_TO_ZERO_CONFIRMED:
+				nextState.isScaleToZeroConfirmed = true;
+				return nextState;
+
+			case ProcessesDiffActionType.SCALE_TO_ZERO_UNCONFIRMED:
+				nextState.isScaleToZeroConfirmed = false;
 				return nextState;
 
 			default:
@@ -263,9 +268,7 @@ export default function CreateScaleRequestComponent(props: Props) {
 					scale={scale}
 					nextScale={nextScale}
 					release={release}
-					onConfirmScaleToZeroChange={(confirmed) =>
-						dispatch({ type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED, confirmed })
-					}
+					dispatch={dispatch}
 				/>
 			</Box>
 

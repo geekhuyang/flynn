@@ -1,17 +1,155 @@
 import * as React from 'react';
 import { Box, BoxProps } from 'grommet';
 
-import ProcessScale from './ProcessScale';
+import ProcessScale, {
+	ActionType as ProcessScaleActionType,
+	Action as ProcessScaleAction,
+	Props as ProcessScaleProps
+} from './ProcessScale';
 import protoMapDiff, { Diff, DiffOp, DiffOption } from './util/protoMapDiff';
 import buildProcessesMap from './util/buildProcessesMap';
 import { ScaleRequest, CreateScaleRequest, ScaleRequestState, Release } from './generated/controller_pb';
+import useMergeDispatch from './useMergeDispatch';
 
-interface Props extends BoxProps {
+export enum ActionType {
+	SET_SCALE_TO_ZERO_CONFIRMED = 'ProcessesDiff__SET_SCALE_TO_ZERO_CONFIRMED',
+	SCALE_TO_ZERO_CONFIRMED = 'ProcessesDiff__SCALE_TO_ZERO_CONFIRMED',
+	SCALE_TO_ZERO_UNCONFIRMED = 'ProcessesDiff__SCALE_TO_ZERO_UNCONFIRMED',
+	PROPS_UPDATED = 'ProcessesDiff__PROPS_UPDATED'
+}
+
+interface SetScaleToZeroConfirmedAction {
+	type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED;
+	key: string;
+	confirmed: boolean;
+}
+
+interface PropsUpdatedAction {
+	type: ActionType.PROPS_UPDATED;
+	props: StateProps;
+}
+
+interface ScaleToZeroConfirmedAction {
+	type: ActionType.SCALE_TO_ZERO_CONFIRMED;
+}
+
+interface ScaleToZeroUnconfirmedAction {
+	type: ActionType.SCALE_TO_ZERO_UNCONFIRMED;
+}
+
+export type Action =
+	| SetScaleToZeroConfirmedAction
+	| PropsUpdatedAction
+	| ScaleToZeroConfirmedAction
+	| ScaleToZeroUnconfirmedAction
+	| ProcessScaleAction;
+
+type Dispatcher = (actions: Action | Action[]) => void;
+
+interface State extends StateProps {
+	scaleToZeroConfirmationRequired: Set<string>;
+	isScaleToZeroConfirmed: boolean | null;
+	scaleToZeroConfirmed: Map<string, boolean>;
+	processesFullDiff: Diff<string, number>;
+}
+
+function initialState({ scale, nextScale, release, confirmScaleToZero = true }: StateProps): State {
+	return {
+		scaleToZeroConfirmationRequired: new Set<string>(),
+		isScaleToZeroConfirmed: null,
+		scaleToZeroConfirmed: new Map<string, boolean>([]),
+		processesFullDiff: [],
+
+		scale,
+		nextScale,
+		release,
+		confirmScaleToZero
+	};
+}
+
+type Reducer = (prevState: State, actions: Action | Action[]) => State;
+
+function reducer(prevState: State, actions: Action | Action[]): State {
+	if (!Array.isArray(actions)) {
+		actions = [actions];
+	}
+	const nextState = actions.reduce((prevState: State, action: Action) => {
+		const nextState = Object.assign({}, prevState);
+		switch (action.type) {
+			case ActionType.SET_SCALE_TO_ZERO_CONFIRMED:
+				const nextMap = new Map(nextState.scaleToZeroConfirmed);
+				nextMap.set(action.key, action.confirmed);
+				nextState.scaleToZeroConfirmed = nextMap;
+				return nextState;
+
+			case ActionType.PROPS_UPDATED:
+				Object.assign(nextState, action.props);
+				return nextState;
+
+			default:
+				return prevState;
+		}
+	}, prevState);
+
+	if (nextState === prevState) return prevState;
+
+	(() => {
+		const { scale, nextScale, release } = nextState;
+		if (scale === prevState.scale && nextScale === prevState.nextScale && release === prevState.release) return;
+
+		nextState.processesFullDiff = protoMapDiff(
+			buildProcessesMap((scale || new ScaleRequest()).getNewProcessesMap(), release),
+			buildProcessesMap(nextScale.getProcessesMap(), release),
+			DiffOption.INCLUDE_UNCHANGED,
+			DiffOption.NO_DUPLICATE_KEYS
+		);
+	})();
+
+	(() => {
+		const keys = new Set<string>();
+		const { confirmScaleToZero, processesFullDiff } = nextState;
+		if (confirmScaleToZero === prevState.confirmScaleToZero && processesFullDiff === prevState.processesFullDiff)
+			return;
+		if (!confirmScaleToZero) return;
+
+		processesFullDiff.forEach((op) => {
+			if (op.op === 'remove' || op.value === 0) {
+				keys.add(op.key);
+			}
+		});
+		nextState.scaleToZeroConfirmationRequired = keys;
+	})();
+
+	(() => {
+		const { scaleToZeroConfirmationRequired, scaleToZeroConfirmed } = nextState;
+		if (
+			scaleToZeroConfirmationRequired === prevState.scaleToZeroConfirmationRequired &&
+			scaleToZeroConfirmed === prevState.scaleToZeroConfirmed
+		)
+			return;
+
+		let isConfirmed = true;
+		for (let k of scaleToZeroConfirmationRequired) {
+			if (scaleToZeroConfirmed.get(k) !== true) {
+				isConfirmed = false;
+			}
+		}
+		nextState.isScaleToZeroConfirmed = isConfirmed;
+	})();
+
+	return nextState;
+}
+
+interface StateProps {
 	scale: ScaleRequest;
 	nextScale: CreateScaleRequest;
 	release: Release | null;
+	confirmScaleToZero: boolean;
+}
+
+interface Props extends Pick<StateProps, Exclude<keyof StateProps, 'confirmScaleToZero'>>, BoxProps {
 	confirmScaleToZero?: boolean;
-	onConfirmScaleToZeroChange?: (confirmed: boolean) => void;
+	dispatch: Dispatcher;
 }
 
 export default function ProcessesDiff({
@@ -19,57 +157,35 @@ export default function ProcessesDiff({
 	nextScale,
 	release = null,
 	confirmScaleToZero = true,
-	onConfirmScaleToZeroChange = () => {},
+	dispatch: callerDispatch,
 	direction,
 	...boxProps
 }: Props) {
-	const [processesFullDiff, setProcessesFullDiff] = React.useState<Diff<string, number>>([]);
+	const [{ isScaleToZeroConfirmed, scaleToZeroConfirmed, processesFullDiff }, localDispatch] = React.useReducer(
+		reducer,
+		initialState({ scale, nextScale, release, confirmScaleToZero })
+	);
+	const dispatch = useMergeDispatch(localDispatch, callerDispatch, false);
+
 	React.useEffect(
-		// keep up-to-date full diff of processes
 		() => {
-			const fullDiff = protoMapDiff(
-				buildProcessesMap((scale || new ScaleRequest()).getNewProcessesMap(), release),
-				buildProcessesMap(nextScale.getProcessesMap(), release),
-				DiffOption.INCLUDE_UNCHANGED,
-				DiffOption.NO_DUPLICATE_KEYS
-			);
-			setProcessesFullDiff(fullDiff);
+			dispatch({ type: ActionType.PROPS_UPDATED, props: { scale, nextScale, release, confirmScaleToZero } });
 		},
-		[nextScale, scale, release]
+		[scale, nextScale, release, confirmScaleToZero, dispatch]
+	);
+
+	React.useEffect(
+		() => {
+			if (isScaleToZeroConfirmed) {
+				dispatch({ type: ActionType.SCALE_TO_ZERO_CONFIRMED });
+			} else {
+				dispatch({ type: ActionType.SCALE_TO_ZERO_UNCONFIRMED });
+			}
+		},
+		[isScaleToZeroConfirmed, dispatch]
 	);
 
 	const isPending = scale.getState() === ScaleRequestState.SCALE_PENDING;
-
-	const [isScaleToZeroConfirmed, setIsScaleToZeroConfirmed] = React.useState<boolean | null>(null);
-	const [scaleToZeroConfirmed, setScaleToZeroConfirmed] = React.useState(new Map<string, boolean>());
-	const scaleToZeroConfirmationRequired = React.useMemo(
-		() => {
-			const keys = new Set<string>();
-			if (!confirmScaleToZero) return keys;
-			processesFullDiff.forEach((op) => {
-				if (op.op === 'remove' || op.value === 0) {
-					keys.add(op.key);
-				}
-			});
-			return keys;
-		},
-		[confirmScaleToZero, processesFullDiff]
-	);
-	React.useEffect(
-		() => {
-			let isConfirmed = true;
-			for (let k of scaleToZeroConfirmationRequired) {
-				if (scaleToZeroConfirmed.get(k) !== true) {
-					isConfirmed = false;
-				}
-			}
-			if (isScaleToZeroConfirmed !== isConfirmed || isScaleToZeroConfirmed === null) {
-				setIsScaleToZeroConfirmed(isConfirmed);
-				onConfirmScaleToZeroChange(isConfirmed);
-			}
-		},
-		[onConfirmScaleToZeroChange, scaleToZeroConfirmationRequired, scaleToZeroConfirmed] // eslint-disable-line react-hooks/exhaustive-deps
-	);
 
 	return (
 		<Box direction="row" gap="small" {...boxProps}>
@@ -86,19 +202,16 @@ export default function ProcessesDiff({
 					}
 					m.push(
 						<Box align="center" key={key}>
-							<ProcessScale
+							<WrappedProcessScale
+								processesKey={key}
 								direction={direction}
 								confirmScaleToZero={confirmScaleToZero}
 								scaleToZeroConfirmed={scaleToZeroConfirmed.get(key)}
-								onConfirmChange={(isConfirmed) => {
-									const nextScaleToZeroConfirmed = new Map(scaleToZeroConfirmed);
-									nextScaleToZeroConfirmed.set(key, isConfirmed);
-									setScaleToZeroConfirmed(nextScaleToZeroConfirmed);
-								}}
 								value={val}
 								originalValue={startVal}
 								showLabelDelta={!isPending}
 								label={key}
+								dispatch={dispatch}
 							/>
 						</Box>
 					);
@@ -109,3 +222,29 @@ export default function ProcessesDiff({
 		</Box>
 	);
 }
+
+interface WrappedProcessScaleProps extends ProcessScaleProps {
+	processesKey: string;
+	dispatch: Dispatcher;
+}
+
+const WrappedProcessScale = ({ processesKey: key, dispatch: parentDispatch, ...props }: WrappedProcessScaleProps) => {
+	const dispatch = React.useCallback(
+		(actions: Action | Action[]) => {
+			if (!Array.isArray(actions)) actions = [actions];
+			actions.forEach((action: Action) => {
+				switch (action.type) {
+					case ProcessScaleActionType.CONFIRM_SCALE_TO_ZERO:
+						parentDispatch({ type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED, key, confirmed: true });
+						return;
+
+					case ProcessScaleActionType.UNCONFIRM_SCALE_TO_ZERO:
+						parentDispatch({ type: ActionType.SET_SCALE_TO_ZERO_CONFIRMED, key, confirmed: false });
+						return;
+				}
+			});
+		},
+		[key, parentDispatch]
+	);
+	return <ProcessScale dispatch={dispatch} {...props} />;
+};
