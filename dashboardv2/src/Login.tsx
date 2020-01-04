@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Box, Button, Form, FormField, TextInput } from 'grommet';
 
 import useClient from './useClient';
-import useCallIfMounted from './useCallIfMounted';
+import useWithCancel from './useWithCancel';
 import useErrorHandler from './useErrorHandler';
 
 export interface Props {
@@ -13,17 +13,18 @@ export interface Props {
 export default function Login({ onLoginSuccess }: Props) {
 	const [loginToken, setLoginToken] = React.useState('');
 	const client = useClient();
-	const callIfMounted = useCallIfMounted();
+	const withCancel = useWithCancel();
 	const handleError = useErrorHandler();
 	const handleFormSubmit = (e: React.SyntheticEvent) => {
 		e.preventDefault();
-		client.login(loginToken, (s, err) => {
+		const cancel = client.login(loginToken, (s, err) => {
 			if (err !== null) {
 				handleError(err);
 			} else {
-				callIfMounted(onLoginSuccess);
+				onLoginSuccess();
 			}
 		});
+		withCancel.set('login', cancel);
 	};
 	const handleTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		setLoginToken(e.target.value);

@@ -4,7 +4,7 @@ import { Checkmark as CheckmarkIcon } from 'grommet-icons';
 import { Box, Button } from 'grommet';
 import useApp from './useApp';
 import useClient from './useClient';
-import useCallIfMounted from './useCallIfMounted';
+import useWithCancel from './useWithCancel';
 import useNavProtection from './useNavProtection';
 import useErrorHandler from './useErrorHandler';
 import Loading from './Loading';
@@ -125,7 +125,7 @@ function MetadataEditor(props: Props) {
 		initialState(props)
 	);
 	const client = useClient();
-	const callIfMounted = useCallIfMounted();
+	const withCancel = useWithCancel();
 	const handleError = useErrorHandler();
 
 	React.useEffect(
@@ -191,18 +191,17 @@ function MetadataEditor(props: Props) {
 			app.setName(appName);
 			protoMapReplace(app.getLabelsMap(), new jspb.Map(getEntries(data as Data)));
 			dispatch({ type: ActionType.DEPLOY });
-			client.updateApp(app, (app: App, error: Error | null) => {
-				callIfMounted(() => {
-					if (error) {
-						dispatch({ type: ActionType.DEPLOY_ERROR, error });
-						handleError(error);
-						return;
-					}
-					dispatch({ type: ActionType.DEPLOY_SUCCESS, data: buildData(app.getLabelsMap().toArray()) });
-				});
+			const cancel = client.updateApp(app, (app: App, error: Error | null) => {
+				if (error) {
+					dispatch({ type: ActionType.DEPLOY_ERROR, error });
+					handleError(error);
+					return;
+				}
+				dispatch({ type: ActionType.DEPLOY_SUCCESS, data: buildData(app.getLabelsMap().toArray()) });
 			});
+			withCancel.set(`updateApp(${app.getName()}`, cancel);
 		},
-		[appName, callIfMounted, client, data, handleError]
+		[appName, withCancel, client, data, handleError]
 	);
 
 	const handleCancelBtnClick = React.useCallback((event?: React.SyntheticEvent) => {

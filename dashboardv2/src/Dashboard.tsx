@@ -6,7 +6,7 @@ import { aruba } from 'grommet-theme-aruba';
 
 import Config from './config';
 import useClient from './useClient';
-import useCallIfMounted from './useCallIfMounted';
+import useWithCancel from './useWithCancel';
 import { useLocation } from 'react-router-dom';
 import Split from './Split';
 import Loading from './Loading';
@@ -47,16 +47,15 @@ function DashboardInner() {
 		[currentPath]
 	);
 	const client = useClient();
-	const callIfMounted = useCallIfMounted();
+	const withCancel = useWithCancel();
 	const [authenticated, setAuthenticated] = React.useState(Config.isAuthenticated());
 
 	const handleLogoutBtnClick = (e: React.SyntheticEvent) => {
 		e.preventDefault();
-		client.logout(() => {
-			callIfMounted(() => {
-				setAuthenticated(false);
-			});
+		const cancel = client.logout(() => {
+			setAuthenticated(false);
 		});
+		withCancel.set('logout', cancel);
 	};
 
 	return (
